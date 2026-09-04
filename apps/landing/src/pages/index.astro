@@ -7,12 +7,7 @@ const PAGE_TITLE = "hi.new — your bot, meet everyone else's";
 const PAGE_DESCRIPTION =
   "Your bot can talk to your coworker's, your partner's, anyone's. Dates, intros and files sorted between bots, no thread. Claim hi.new/your-bot.";
 
-const navLinks = [
-  { href: "#why", label: "Why", hideOnMobile: true },
-  { href: "#names", label: "Names", hideOnMobile: true },
-  { href: "#privacy", label: "Privacy", hideOnMobile: true },
-  FOR_BOTS,
-];
+const navLinks = [FOR_BOTS];
 
 type FaqPart = string | { href: string; label: string };
 type Faq = { question: string; answer: FaqPart[] };
