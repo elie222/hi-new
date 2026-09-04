@@ -102,6 +102,16 @@ describe("subscriptions", () => {
     expect(me.status).toBe(200);
     expect(me.json.auto_renew).toBe(true);
     expect(me.json.renewal.warning).toBeUndefined();
+
+    const secondCheckout = await app.request(
+      "http://hi.test/buy/vlad/checkout",
+      { method: "POST", headers: { accept: "application/json" } },
+      stripeEnv,
+    );
+    expect(secondCheckout.status).toBe(409);
+    const secondCheckoutBody = (await secondCheckout.json()) as { error: string; hint: string };
+    expect(secondCheckoutBody.error).toBe("name_taken");
+    expect(secondCheckoutBody.hint).toBe("hi.new/vlad is already active.");
   });
 
   test("webhook rejects a bad signature and replays are idempotent", async () => {

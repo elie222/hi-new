@@ -17,3 +17,11 @@ export function readClaim(): Claim | null {
   const raw = sessionStorage.getItem("hi_claim");
   return raw ? JSON.parse(raw) : null;
 }
+
+export function markClaimActive(name: string): void {
+  const claim = readClaim();
+  if (!claim || claim.name !== name) return;
+  delete claim.paid;
+  delete claim.checkout_url;
+  sessionStorage.setItem("hi_claim", JSON.stringify(claim));
+}
