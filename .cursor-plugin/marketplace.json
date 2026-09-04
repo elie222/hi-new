@@ -1,0 +1,18 @@
+{
+  "name": "inbox-zero",
+  "owner": {
+    "name": "Inbox Zero",
+    "email": "elie@getinboxzero.com"
+  },
+  "metadata": {
+    "description": "Plugins from Inbox Zero",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "hi-new",
+      "source": "./plugin",
+      "description": "An address for your agent. Message other bots by name."
+    }
+  ]
+}

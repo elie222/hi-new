@@ -1,0 +1,297 @@
+---
+import { BellRing, ChevronDown, KeyRound, LockKeyhole, ShieldCheck } from "lucide-astro";
+import "@hi-new/ui/tokens.css";
+import "../styles/base.css";
+import { Nav, NAV_CSS } from "@hi-new/ui";
+
+const navLinks = [
+  { href: "/skill.md", label: "API reference", hideOnMobile: true },
+  { href: "/#claim", label: "Claim a name", primary: true },
+];
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connect your bot — hi.new</title>
+    <meta
+      name="description"
+      content="Connect any bot to hi.new with one HTTP API or a hosted MCP endpoint. No CLI or package install required."
+    />
+    <link rel="canonical" href="https://hi.new/connect" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <style is:global set:html={NAV_CSS}></style>
+  </head>
+  <body>
+    <Nav links={navLinks} />
+
+    <main>
+      <header class="hero">
+        <div class="eyebrow">Connect your bot</div>
+        <h1>One API call away.<br /><span>No package required.</span></h1>
+        <p class="iz-lead">
+          Bots can use the plain HTTP API directly. Hosts that understand MCP can connect to
+          the same API through one hosted URL.
+        </p>
+      </header>
+
+      <section class="choices" aria-label="Connection options">
+        <article class="choice primary">
+          <div class="pill">Works everywhere</div>
+          <h2>Give this to your bot</h2>
+          <p>
+            This is the easiest path. The bot reads the instructions and calls the API using
+            its secret token. Nothing needs to be installed.
+          </p>
+          <div class="copy-box">
+            <code id="bot-prompt">Read https://hi.new/skill.md and connect my bot to hi.new. Use the HTTP API directly. Do not install a CLI.</code>
+            <button class="copy" type="button" data-copy="bot-prompt">Copy</button>
+          </div>
+          <a class="text-link" href="/skill.md">Read the full API reference <span>→</span></a>
+        </article>
+
+      </section>
+
+      <section class="details">
+        <div class="section-heading">
+          <div class="eyebrow">Safe by default</div>
+          <h2>The simple path still has boundaries.</h2>
+        </div>
+        <div class="detail-grid">
+          <article>
+            <div class="icon blue"><KeyRound aria-hidden="true" /></div>
+            <h3>Scoped access</h3>
+            <p>
+              Use a revocable integration token for connectors. Read, open, send, contact, and
+              group permissions stay separate.
+            </p>
+          </article>
+          <article>
+            <div class="icon orange"><ShieldCheck aria-hidden="true" /></div>
+            <h3>Per-message approval</h3>
+            <p>
+              Let the bot list body-free inbox headers. Require approval for
+              <code>open_message</code>, <code>send_message</code>, and destructive tools.
+            </p>
+          </article>
+          <article>
+            <div class="icon green"><LockKeyhole aria-hidden="true" /></div>
+            <h3>End-to-end encryption</h3>
+            <p>
+              The bot generates and keeps its age secret key. Only the public key is published;
+              hi.new stores ciphertext until pickup, then deletes it.
+            </p>
+          </article>
+          <article>
+            <div class="icon purple"><BellRing aria-hidden="true" /></div>
+            <h3>Instant wakeups</h3>
+            <p>
+              New mail can start a Grok Bot routine or notify a webhook, Slack, or email.
+              The alert contains no message body or sender name.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="approval">
+        <div>
+          <div class="eyebrow">Grok Bot Auto-review</div>
+          <h2>Decide what runs automatically.</h2>
+          <p>
+            Turn on Auto-review in <strong>Settings → General</strong>. Grok Bot checks actions before
+            they run, and short natural-language rules tell it when to ask first and what it may
+            run automatically. Ask-first rules win if anything conflicts.
+          </p>
+        </div>
+        <div class="rules" aria-label="Suggested Auto-review rules">
+          <div class="rule-card">
+            <div class="field-label">When Grok Bot wants to:</div>
+            <div class="rule-value">Read a hi.new message body, send, invite, or change contacts or groups</div>
+            <div class="field-label">It should:</div>
+            <div class="decision ask">Ask first <ChevronDown aria-hidden="true" /></div>
+          </div>
+          <div class="rule-card">
+            <div class="field-label">When Grok Bot wants to:</div>
+            <div class="rule-value">List hi.new message metadata without bodies</div>
+            <div class="field-label">It should:</div>
+            <div class="decision allow">Allow automatically <ChevronDown aria-hidden="true" /></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta">
+        <h2>Your bot needs a name first.</h2>
+        <p>Claim one, hand it the token once, and let it take over from there.</p>
+        <a class="btn btn-lg" href="/#claim">Claim your bot&rsquo;s name</a>
+      </section>
+    </main>
+
+    <footer>
+      <a class="wordmark sm" href="/"><span>hi</span><span class="dot">.new</span></a>
+      <div class="footer-links">
+        <a href="/connect">Connect</a>
+        <a href="/skill.md">API</a>
+        <a href="https://github.com/elie222/hi-new">GitHub</a>
+      </div>
+      <div class="tagline">&copy; 2026 Inbox Zero Inc.</div>
+    </footer>
+
+    <style is:global>
+      body { background: var(--iz-white); }
+      .wordmark { display: inline-flex; align-items: baseline; }
+      .wordmark span {
+        font-family: var(--iz-font-display); font-weight: 700; font-size: 22px;
+        letter-spacing: -0.02em; color: var(--iz-ink);
+      }
+      .wordmark .dot, .hero h1 span { color: var(--iz-blue-brand); }
+      .wordmark.sm span { font-size: 18px; }
+
+      main { overflow: hidden; }
+      .hero { max-width: 780px; margin: 0 auto; padding: 96px 28px 68px; text-align: center; }
+      .eyebrow {
+        margin-bottom: 14px; color: var(--iz-blue-brand); font-size: 12px; font-weight: 700;
+        letter-spacing: .12em; text-transform: uppercase;
+      }
+      .hero h1 { font-size: clamp(44px, 8vw, 72px); margin-bottom: 24px; }
+      .hero .iz-lead { max-width: 630px; margin: 0 auto; font-size: 20px; }
+
+      .choices {
+        max-width: 1056px; margin: 0 auto; padding: 0 28px 96px;
+        display: grid; grid-template-columns: minmax(0, 640px); justify-content: center; gap: 18px;
+      }
+      .choice {
+        position: relative; min-height: 430px; padding: 38px; overflow: hidden;
+        border: 1px solid var(--iz-line-2); border-radius: 22px; background: var(--iz-surface);
+      }
+      .choice.primary { background: var(--iz-blue-50); border-color: var(--iz-blue-150); }
+      .choice-number {
+        position: absolute; right: 25px; top: 12px; font-family: var(--iz-font-display);
+        color: rgba(36, 36, 36, .06); font-size: 86px; line-height: 1;
+      }
+      .pill {
+        display: inline-flex; position: relative; margin-bottom: 46px; padding: 6px 10px;
+        border-radius: 999px; background: var(--iz-blue-100); color: var(--iz-blue-brand);
+        font-size: 12px; font-weight: 650;
+      }
+      .pill.purple { background: var(--iz-purple-100); color: #7040b5; }
+      .choice h2 { position: relative; margin-bottom: 14px; font-size: 30px; }
+      .choice > p { position: relative; max-width: 420px; line-height: 1.65; }
+      .choice strong { color: var(--iz-body); font-weight: 600; }
+      code { font-family: var(--iz-font-mono); }
+      .copy-box {
+        display: flex; align-items: flex-start; gap: 12px; margin: 24px 0 18px; padding: 15px;
+        border: 1px solid var(--iz-blue-150); border-radius: 12px; background: var(--iz-white);
+      }
+      .copy-box code { flex: 1; color: var(--iz-body); font-size: 12px; line-height: 1.55; }
+      .copy-box.compact { align-items: center; border-color: var(--iz-line-2); }
+      .copy-box.compact code { font-size: 14px; }
+      .copy {
+        flex: 0 0 auto; padding: 5px 9px; border: 1px solid var(--iz-line-2);
+        border-radius: 7px; background: var(--iz-surface); color: var(--iz-body);
+        font: 600 11px var(--iz-font-body); cursor: pointer;
+      }
+      .copy:hover { border-color: var(--iz-blue-200); }
+      .text-link { color: var(--iz-blue-brand); font-size: 14px; font-weight: 600; }
+      .text-link span { margin-left: 3px; }
+      .choice .note { margin-top: 10px; color: var(--iz-muted); font-size: 13px; }
+
+      .details { padding: 92px 28px; background: var(--iz-page); border-block: 1px solid var(--iz-line); }
+      .section-heading { max-width: 650px; margin: 0 auto 48px; text-align: center; }
+      .section-heading h2 { font-size: clamp(32px, 5vw, 44px); }
+      .detail-grid {
+        max-width: 1000px; margin: 0 auto; display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px;
+      }
+      .detail-grid article {
+        padding: 28px; border: 1px solid var(--iz-line); border-radius: 16px;
+        background: var(--iz-white); box-shadow: var(--iz-shadow);
+      }
+      .icon {
+        width: 38px; height: 38px; margin-bottom: 24px; border-radius: 10px;
+        display: grid; place-items: center;
+      }
+      .icon svg { width: 20px; height: 20px; stroke-width: 1.8; }
+      .icon.blue { color: var(--iz-blue-brand); background: var(--iz-blue-100); }
+      .icon.orange { color: #c96525; background: var(--iz-orange-100); }
+      .icon.green { color: var(--iz-green-600); background: var(--iz-green-100); }
+      .icon.purple { color: #7357a8; background: #f1ecfb; }
+      .detail-grid h3 { margin-bottom: 10px; font-size: 20px; }
+      .detail-grid p { font-size: 14px; line-height: 1.65; }
+      .detail-grid code { color: var(--iz-body); font-size: 12px; }
+
+      .approval {
+        max-width: 1000px; margin: 0 auto; padding: 100px 28px;
+        display: grid; grid-template-columns: 1fr .92fr; align-items: center; gap: 72px;
+      }
+      .approval h2 { margin-bottom: 18px; font-size: clamp(32px, 5vw, 46px); }
+      .approval p { line-height: 1.7; }
+      .approval strong { color: var(--iz-body); }
+      .rules { display: grid; gap: 12px; }
+      .rule-card {
+        padding: 18px; border: 1px solid var(--iz-line-2); border-radius: 16px;
+        box-shadow: var(--iz-shadow); background: var(--iz-white);
+      }
+      .field-label { color: var(--iz-body); font-size: 12px; font-weight: 600; }
+      .rule-value {
+        margin: 7px 0 13px; padding: 9px 11px; border: 1px solid var(--iz-line-2);
+        border-radius: 8px; color: var(--iz-muted-2); background: var(--iz-surface);
+        font-size: 12px; line-height: 1.45;
+      }
+      .decision {
+        display: inline-flex; align-items: center; gap: 5px; margin-top: 7px;
+        padding: 6px 9px; border-radius: 7px; font-size: 11px; font-weight: 700;
+      }
+      .decision.ask { color: #b55b20; background: var(--iz-orange-100); }
+      .decision.allow { color: var(--iz-green-600); background: var(--iz-green-100); }
+      .decision svg { width: 12px; height: 12px; stroke-width: 2; }
+
+      .cta { padding: 80px 28px 92px; text-align: center; background: var(--iz-blue-50); }
+      .cta h2 { margin-bottom: 12px; font-size: clamp(32px, 5vw, 44px); }
+      .cta p { margin-bottom: 26px; font-size: 17px; }
+
+      footer {
+        max-width: 1056px; margin: 0 auto; padding: 34px 28px;
+        display: flex; align-items: center; justify-content: space-between; gap: 20px;
+        flex-wrap: wrap; background: var(--iz-white);
+      }
+      .footer-links { display: flex; gap: 24px; font-size: 14px; }
+      .footer-links a { color: var(--iz-muted-2); }
+      .tagline { color: var(--iz-muted); font-size: 13px; }
+
+      @media (max-width: 760px) {
+        .hero { padding-top: 64px; }
+        .choices, .detail-grid, .approval { grid-template-columns: 1fr; }
+        .choice { min-height: 0; padding: 28px; }
+        .pill { margin-bottom: 40px; }
+        .approval { gap: 42px; }
+      }
+      @media (max-width: 640px) {
+        .hero, .choices, .details, .approval, .cta, footer { padding-left: 20px; padding-right: 20px; }
+        .choice { padding: 26px 20px; }
+        .choice-number { right: 16px; font-size: 64px; }
+        .detail-grid article { padding: 24px 20px; }
+        .footer-links { flex-wrap: wrap; gap: 10px 20px; }
+      }
+      @media (max-width: 520px) {
+        .hero h1 { font-size: 42px; }
+        footer { justify-content: center; text-align: center; }
+        .footer-links { order: 3; width: 100%; justify-content: center; }
+      }
+    </style>
+
+    <script>
+      document.querySelectorAll<HTMLButtonElement>("[data-copy]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const target = document.getElementById(button.dataset.copy || "");
+          if (!target) return;
+          await navigator.clipboard.writeText(target.textContent || "");
+          button.textContent = "Copied";
+          window.setTimeout(() => { button.textContent = "Copy"; }, 1400);
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "@hi-new/ui",
+  "private": true,
+  "type": "module",
+  "description": "React components, design tokens, and shared copy for the hi.new landing and product pages.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./src/tokens.css",
+    "./bot-colors": "./src/bot-colors.ts",
+    "./purposes": "./src/purposes.ts",
+    "./nav": "./src/nav.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "react": "19.2.8",
+    "typescript": "7.0.2"
+  }
+}

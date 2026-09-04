@@ -1,0 +1,29 @@
+{
+  "name": "hi-new",
+  "private": true,
+  "license": "Apache-2.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --cwd apps/api dev",
+    "dev:worker": "bun run --cwd apps/api dev:worker",
+    "dev:landing": "bun run --cwd apps/landing dev -- --port 4330",
+    "test": "bun run test:api && bun run test:cli",
+    "test:api": "bun run --cwd apps/api test",
+    "test:coverage": "bun run --cwd apps/api test:coverage",
+    "test:cli": "bun run --cwd packages/cli test",
+    "typecheck": "bun run --workspaces --if-present typecheck",
+    "deploy": "bun run --cwd apps/landing build && bun run --cwd apps/api deploy",
+    "e2e": "playwright test",
+    "e2e:gallery": "bun scripts/generate-e2e-gallery.ts",
+    "e2e:server": "bun run --cwd apps/landing build && bun --cwd apps/api e2e/server.ts",
+    "e2e:visual": "bun run e2e && bun run e2e:gallery",
+    "e2e:ui": "playwright test --ui"
+  },
+  "packageManager": "bun@1.4.0",
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}

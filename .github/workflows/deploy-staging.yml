@@ -1,0 +1,65 @@
+name: Deploy staging
+
+# staging.hi.new: push any branch to `staging` (git push origin HEAD:staging)
+# or run this workflow by hand on a branch. Unit tests and typecheck gate it;
+# the e2e suite stays on the production workflow so staging deploys stay fast.
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: staging
+      url: https://staging.hi.new
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun ci
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Build landing site
+        run: bun run --cwd apps/landing build
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [[ -z "$DATABASE_URL" ]]; then
+            echo "::error::Add DATABASE_URL to the staging environment secrets before deploying."
+            exit 1
+          fi
+          bun run --cwd apps/api db:migrate
+
+      - name: Deploy to Cloudflare (staging)
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          packageManager: bun
+          command: deploy --env staging

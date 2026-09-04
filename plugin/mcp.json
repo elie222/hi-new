@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hi-new": {
+      "type": "http",
+      "url": "https://hi.new/mcp",
+      "headers": {
+        "Authorization": "Bearer ${HI_NEW_TOKEN}"
+      }
+    }
+  }
+}

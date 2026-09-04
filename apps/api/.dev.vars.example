@@ -1,0 +1,27 @@
+# Copy to .dev.vars for `bun run dev`. Production values via `wrangler secret put`.
+# Local Postgres (docker): create the database once with `createdb hi_new`, then `bun run db:migrate`.
+DATABASE_URL=postgres://postgres:password@localhost:5432/hi_new
+# Where Stripe sends the browser back after checkout. scripts/dev.sh adds this if missing.
+APP_ORIGIN=http://localhost:8787
+# Optional — buy flow returns 503 without these. Use a TEST key locally.
+STRIPE_SECRET_KEY=sk_test_...
+# Optional — enables Link Agents / Stripe SPT payments for paid handles.
+# Generate with `openssl rand -base64 32`; use the Stripe Business Network profile ID.
+# MPP_SECRET_KEY=
+# STRIPE_NETWORK_ID=
+# Optional locally: without RESEND_API_KEY, emails (and their sign-in links) print to the wrangler console.
+# RESEND_API_KEY=re_...
+# Managed by scripts/dev.sh: overwritten with the Stripe CLI's signing secret on each start.
+STRIPE_WEBHOOK_SECRET=whsec_...
+# Owner sign-in (Better Auth). scripts/dev.sh generates BETTER_AUTH_SECRET if missing.
+# In production: `wrangler secret put BETTER_AUTH_SECRET` (openssl rand -base64 32).
+BETTER_AUTH_SECRET=
+# Encrypts private notification URLs and credentials. scripts/dev.sh generates it if missing.
+# In production: `wrangler secret put NOTIFICATION_ENCRYPTION_KEY` (openssl rand -base64 32).
+NOTIFICATION_ENCRYPTION_KEY=
+# Optional social sign-in. Register OAuth apps with callback URLs:
+#   GitHub: <origin>/owner/auth/callback/github   Google: <origin>/owner/auth/callback/google
+# GITHUB_CLIENT_ID=
+# GITHUB_CLIENT_SECRET=
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=

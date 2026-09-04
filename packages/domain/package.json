@@ -1,0 +1,15 @@
+{
+  "name": "@hi-new/domain",
+  "private": true,
+  "type": "module",
+  "description": "Shared hi.new domain rules for handle names and pricing.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}

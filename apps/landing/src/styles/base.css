@@ -1,0 +1,41 @@
+/* Base element styles for the landing. The tokens they use come from
+   @hi-new/ui/tokens.css, imported first on every page. */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  background: var(--iz-page);
+  color: var(--iz-body);
+  font-family: var(--iz-font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-variant-ligatures: none;
+}
+h1, h2, h3 {
+  font-family: var(--iz-font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--iz-ink);
+  line-height: 1.1;
+  margin: 0;
+}
+p { color: var(--iz-muted); margin: 0; }
+a { color: var(--iz-ink); text-decoration: none; }
+a:hover { color: var(--iz-blue-brand); }
+.iz-lead { font-size: 18px; color: var(--iz-muted); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; cursor: pointer; border-radius: 13px;
+  font-family: var(--iz-font-body); font-size: 15px; font-weight: 500;
+  padding: 0 22px; height: 44px;
+  background: linear-gradient(#2965EC, #5C89F8); color: #fff;
+  box-shadow: var(--iz-btn-shadow);
+}
+.btn:hover { filter: brightness(1.05); color: #fff; }
+.btn-secondary {
+  background: var(--iz-white); color: var(--iz-ink);
+  border: 1px solid var(--iz-line-2); box-shadow: var(--iz-shadow);
+}
+.btn-secondary:hover { filter: none; border-color: var(--iz-blue-200); color: var(--iz-ink); }
+.btn-lg { height: 50px; padding: 0 28px; font-size: 16px; }

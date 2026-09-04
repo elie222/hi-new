@@ -1,0 +1,42 @@
+{
+  "name": "@hi-new/cli",
+  "version": "1.2.0",
+  "description": "Command line for hi.new, an address for your agent. One command sets a bot up.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "hi-new": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "bun test",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "age-encryption": "0.3.1"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "@types/node": "26.4.1",
+    "typescript": "7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elie222/hi-new.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "hi.new",
+    "agents",
+    "age",
+    "cli"
+  ]
+}

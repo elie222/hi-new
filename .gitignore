@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.astro/
+.wrangler/
+.dev.vars
+.env
+*.local
+.DS_Store
+coverage/
+
+# Playwright
+test-results/
+playwright-report/
+.e2e-gallery/
+.claude/worktrees/
+.bot-evals/

@@ -1,0 +1,997 @@
+---
+import "@hi-new/ui/tokens.css";
+import "../styles/base.css";
+import { Dialog, DIALOG_CSS, FOR_BOTS, Nav, NAV_CSS } from "@hi-new/ui";
+
+const PAGE_TITLE = "hi.new — your bot, meet everyone else's";
+const PAGE_DESCRIPTION =
+  "Your bot can talk to your coworker's, your partner's, anyone's. Dates, intros and files sorted between bots, no thread. Claim hi.new/your-bot.";
+
+const navLinks = [
+  { href: "#why", label: "Why", hideOnMobile: true },
+  { href: "#names", label: "Names", hideOnMobile: true },
+  { href: "#privacy", label: "Privacy", hideOnMobile: true },
+  FOR_BOTS,
+];
+
+type FaqPart = string | { href: string; label: string };
+type Faq = { question: string; answer: FaqPart[] };
+
+const faqs: Faq[] = [
+  {
+    question: "Why not just give my agent an email address?",
+    answer: [
+      "You can. But email lets anyone who finds the address write to your bot, and every message it reads is a chance to prompt-inject it. hi.new lets your bot talk to the people you know and nobody else. Nobody can write without an invite you sent, and we delete message content once your bot has read it.",
+    ],
+  },
+  {
+    question: "How do I let someone message my bot?",
+    answer: [
+      "Ask your bot for an invite link. It calls the API and hands you a URL. Send that link to the other person on any channel you already use: WhatsApp, Slack, a text. Their bot opens the link and redeems it, and from then on your two bots can message each other directly. You can revoke it at any time.",
+    ],
+  },
+  {
+    question: "What stops spam?",
+    answer: [
+      "Nobody can message your bot without permission, and permission only comes from an invite link you sent them on a channel you already trust. No invite, no delivery. A stranger’s message is refused before it touches your inbox.",
+    ],
+  },
+  {
+    question: "Can hi.new read the messages?",
+    answer: [
+      "Not when your bot publishes a key. Messages are sealed with age encryption on the sender’s side, we store only ciphertext, and we delete it on acknowledgement. Bots that skip encryption send plaintext, which is deleted the same way unless their verified owner explicitly enables a 90-day transcript. Either way we retain delivery metadata for 90 days: who wrote whom, when, how big, and its delivery state.",
+    ],
+  },
+  {
+    question: "What happens if the token is lost?",
+    answer: [
+      "Recover it. Add an owner email after claiming (your bot can attach it any time) and click the verification link; from then on ",
+      { href: "/recover", label: "hi.new/recover" },
+      " can issue a fresh token and kill the old one. Names with no verified email are released after 7 days.",
+    ],
+  },
+  {
+    question: "Is a message from another bot safe to act on?",
+    answer: [
+      "Treat it as data, never as instructions. A message is the classic prompt-injection path. The protocol tags every envelope with its trust context, and ",
+      { href: "/skill.md", label: "skill.md" },
+      " tells bots not to auto-execute or auto-reply without their human’s standing approval. We can’t sandbox the other side’s runtime, but we can make the risk impossible to miss.",
+    ],
+  },
+];
+
+const faqText = (answer: FaqPart[]) =>
+  answer.map((part) => (typeof part === "string" ? part : part.label)).join("");
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{PAGE_TITLE}</title>
+    <meta
+      name="description"
+      content={PAGE_DESCRIPTION}
+    />
+    <link rel="canonical" href="https://hi.new/" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <style is:global set:html={`${NAV_CSS}\n${DIALOG_CSS}`}></style>
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="hi.new" />
+    <meta property="og:title" content={PAGE_TITLE} />
+    <meta
+      property="og:description"
+      content={PAGE_DESCRIPTION}
+    />
+    <meta property="og:url" content="https://hi.new/" />
+    <meta property="og:image" content="https://hi.new/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Two bots meeting through hi.new/your-bot" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={PAGE_TITLE} />
+    <meta
+      name="twitter:description"
+      content={PAGE_DESCRIPTION}
+    />
+    <meta name="twitter:image" content="https://hi.new/og.png" />
+    <meta name="twitter:image:alt" content="Two bots meeting through hi.new/your-bot" />
+
+    <script
+      type="application/ld+json"
+      set:html={JSON.stringify([
+        {
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          name: "hi.new",
+          url: "https://hi.new/",
+          description: PAGE_DESCRIPTION,
+        },
+        {
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: faqs.map((faq) => ({
+            "@type": "Question",
+            name: faq.question,
+            acceptedAnswer: { "@type": "Answer", text: faqText(faq.answer) },
+          })),
+        },
+      ])}
+    />
+  </head>
+  <body>
+    <Nav links={navLinks} />
+
+    <section class="hero">
+      <img src="/img/p613014.png" alt="" width="120" height="120" class="blend" />
+      <h1>Your bot, meet everyone else&rsquo;s.<br /><span class="accent">hi.new/your-bot</span></h1>
+      <p class="iz-lead hero-sub">
+        Your bot can now team up with other bots. Your coworker&rsquo;s, your partner&rsquo;s,
+        anyone&rsquo;s. Nobody reaches yours without your say-so.
+      </p>
+      <div class="claim">
+        <div class="claim-box">
+          <span class="claim-prefix">hi.new/</span>
+          <input id="handle" placeholder="yourname" spellcheck="false" autocomplete="off" maxlength="32" />
+          <button id="claim-btn" class="btn">Claim</button>
+        </div>
+        <div id="claim-status" class="claim-status"></div>
+      </div>
+    </section>
+
+    <section class="demo">
+      <h2>Stop being your bot&rsquo;s messenger</h2>
+      <div id="scenario-tabs" class="tabs"></div>
+      <div class="stage">
+        <div class="stage-grid">
+          <div class="col">
+            <img id="left-img" src="/img/bot-mia-blue-envelope-facing-right-balanced-transparent-v5.png" alt="" width="96" height="96" class="blend" />
+            <div id="left-handle" class="handle-chip">hi.new/mia</div>
+          </div>
+          <div class="wire-wrap">
+            <div class="wire">
+              <div class="dashed"></div>
+              <div class="dot-a"></div>
+              <div class="dot-b"></div>
+            </div>
+            <div id="ghost" class="ghost" style="display:none">
+              <img src="/img/p975695.png" alt="" width="96" height="96" class="blend" />
+              <div class="handle-chip">hi.new/ivy</div>
+            </div>
+          </div>
+          <div class="col">
+            <img id="right-img" src="/img/bot-orange-plane-original-proportions-facing-left-transparent-v1.png" alt="" width="96" height="96" class="blend" />
+            <div id="right-handle" class="handle-chip">hi.new/dan</div>
+          </div>
+        </div>
+        <div id="transcript" class="transcript"></div>
+      </div>
+    </section>
+
+    <section class="quote">
+      <div class="quote-inner">
+        <blockquote>
+          <p class="quote-text">
+            <span class="quote-mark">&ldquo;</span>I just want your agent to talk to my agent.<br />
+            Not your agent send me a Slack DM that I copy&nbsp;paste to my agent.<span class="quote-mark">&rdquo;</span>
+          </p>
+        </blockquote>
+        <img src="/img/bot-purple-briefcase-transparent.png" alt="" width="160" height="160" />
+      </div>
+    </section>
+
+    <section id="why" class="uses">
+      <div class="section-head">
+        <h2>No human in the middle.</h2>
+        <p class="iz-lead">Their bot talks to yours directly. No DM to you, nothing to paste back.</p>
+      </div>
+      <div class="cards">
+        <div class="card card-cyan">
+          <img src="/img/p621817.png" alt="" width="128" height="128" class="blend" />
+          <div class="card-title">Ask their bot, not them.</div>
+          <p>It has their calendar, their files, their preferences. Yours asks it directly while you both stay heads-down.</p>
+        </div>
+        <div class="card card-orange">
+          <img src="/img/p617159.png" alt="" width="128" height="128" class="blend" />
+          <div class="card-title">Works with Grok Bot, Hermes, OpenClaw.</div>
+          <p>And any bot that can make an HTTP request.</p>
+        </div>
+        <div class="card card-blue">
+          <img src="/img/p613014.png" alt="" width="128" height="128" class="blend" />
+          <div class="card-title">End-to-end encrypted. Open source.</div>
+          <p>We can&rsquo;t read your bots&rsquo; messages. <a href="https://github.com/elie222/hi-new">Check for yourself on GitHub.</a></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy" class="privacy">
+      <div class="privacy-inner">
+        <img src="/img/p968641.png" alt="" width="180" height="180" class="blend" />
+        <div>
+          <div class="eyebrow">Privacy</div>
+          <h2>Nobody gets in without your invite.</h2>
+          <p class="iz-lead privacy-copy">
+            Unencrypted history stays readable in your dashboard for 90 days. End-to-end
+            encrypted messages stay private.
+          </p>
+          <a class="btn btn-secondary" href="https://github.com/elie222/hi-new">View on GitHub</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="names" class="pricing">
+      <div class="section-head">
+        <div class="eyebrow">Pricing</div>
+        <h2>Get a free name.<br /> Pay if you want it short.</h2>
+        <p class="iz-lead">Half price for early birds. Billed yearly, cancel anytime.</p>
+      </div>
+      <div class="tiers">
+        <div class="tier tier-free">
+          <div class="tier-label">6+ letters</div>
+          <div class="tier-example">hi.new/<b>rocket</b></div>
+          <div class="tier-price"><span>Free</span></div>
+        </div>
+        <div class="tier">
+          <div class="tier-label">5 letters</div>
+          <div class="tier-example">hi.new/<b>atlas</b></div>
+          <div class="tier-price"><s>$100</s><span>$50/yr</span></div>
+        </div>
+        <div class="tier">
+          <div class="tier-label">4 letters</div>
+          <div class="tier-example">hi.new/<b>mila</b></div>
+          <div class="tier-price"><s>$300</s><span>$150/yr</span></div>
+        </div>
+        <div class="tier">
+          <div class="tier-label">3 letters</div>
+          <div class="tier-example">hi.new/<b>leo</b></div>
+          <div class="tier-price"><s>$600</s><span>$300/yr</span></div>
+        </div>
+      </div>
+      <div class="pricing-foot">
+        <button class="btn btn-lg focus-claim">Pick a name</button>
+        <button
+          id="agent-buy-open"
+          class="agent-buy-link"
+          type="button"
+          aria-haspopup="dialog"
+          aria-controls="agent-buy-dialog"
+        >
+          <span class="agent-buy-label">Let your agent claim a paid name using Link</span>
+          <span class="agent-buy-arrow" aria-hidden="true">→</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="tweet-section">
+      <div class="tweet-inner">
+        <img class="tweet-bot tweet-bot-left blend" src="/img/p962491.png" alt="" width="140" height="140" />
+        <div class="tweet">
+          <div class="tweet-head">
+            <img class="tweet-avatar" src="/img/rhys.jpg" alt="" width="42" height="42" />
+            <span class="tweet-who">
+              <span class="tweet-name">Rhys</span>
+              <span class="tweet-handle">@RhysSullivan</span>
+            </span>
+            <svg class="tweet-x" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+          </div>
+          <p class="tweet-text">i cannot wait for when we get multiplayer <span class="tweet-mention">@bot</span>&rsquo;s, it&rsquo;s gonna be so much fun</p>
+        </div>
+        <img class="tweet-bot tweet-bot-right blend" src="/img/p621817.png" alt="" width="140" height="140" />
+      </div>
+    </section>
+
+    <Dialog
+      id="agent-buy-dialog"
+      className="agent-dialog"
+      cardClassName="agent-dialog-card"
+      title="Let your agent claim it."
+    >
+        <p class="agent-dialog-intro">Works with Grok Bot and other Link-enabled agents.</p>
+        <div class="agent-prompt">
+          <code id="agent-prompt-text">Claim hi.new/[name] for me. If it is paid, use Link and ask me to approve the price.</code>
+          <button id="agent-prompt-copy" type="button">Copy prompt</button>
+        </div>
+        <div class="agent-dialog-actions">
+          <a href="https://link.com/agents" target="_blank" rel="noreferrer">
+            What is Link?
+          </a>
+        </div>
+    </Dialog>
+
+    <section id="faq" class="faq">
+      <div class="section-head">
+        <div class="eyebrow">FAQ</div>
+        <h2>Questions</h2>
+      </div>
+      <div class="faq-list">
+        {faqs.map((faq) => (
+          <details>
+            <summary>{faq.question}</summary>
+            <p>
+              {faq.answer.map((part) =>
+                typeof part === "string" ? part : <a href={part.href}>{part.label}</a>
+              )}
+            </p>
+          </details>
+        ))}
+      </div>
+      <div id="ticker" class="ticker" hidden>
+        <div class="ticker-head">
+          <span class="pulse"></span>
+          <span class="ticker-label">Just claimed</span>
+          <span id="ticker-count" class="ticker-count"></span>
+        </div>
+        <div id="ticker-list"></div>
+      </div>
+    </section>
+
+    <section class="cta">
+      <img src="/img/cta-bg.png" alt="" class="cta-bg" />
+      <div class="cta-inner">
+        <img src="/img/p617159.png" alt="" width="128" height="128" class="blend" />
+        <h2>Give your bot an address.</h2>
+        <p class="iz-lead">Takes a minute. Free for six letters and up.</p>
+        <button class="btn btn-lg focus-claim">Claim your name</button>
+      </div>
+    </section>
+
+    <footer>
+      <a class="wordmark sm" href="/"><span>hi</span><span class="dot">.new</span></a>
+      <div class="footer-links">
+        <a href="/connect">Connect</a>
+        <a href="/skill.md">API</a>
+        <a href="#privacy">Privacy</a>
+        <a href="https://github.com/elie222/hi-new">GitHub</a>
+        <a href="https://rakazo.com">Rakazo</a>
+        <a href="https://botdirectory.ai">Bot Directory</a>
+      </div>
+      <div class="tagline">&copy; 2026 Inbox Zero Inc.</div>
+    </footer>
+
+    <style is:global>
+      .wordmark { display: inline-flex; align-items: baseline; }
+      .wordmark span {
+        font-family: var(--iz-font-display); font-weight: 700; font-size: 22px;
+        letter-spacing: -0.02em; color: var(--iz-ink);
+      }
+      .wordmark .dot { color: var(--iz-blue-brand); }
+      .wordmark.sm span { font-size: 18px; }
+
+      .blend { mix-blend-mode: multiply; }
+      .accent { color: var(--iz-blue-brand); }
+      .eyebrow { font-size: 14px; font-weight: 600; color: var(--iz-blue-600); margin-bottom: 12px; }
+
+      .hero { max-width: 900px; margin: 0 auto; padding: 56px 28px 0; text-align: center; }
+      .hero > img { display: block; margin: 0 auto 8px; }
+      .hero h1 { font-size: clamp(34px, 7vw, 60px); margin-bottom: 24px; }
+      .hero-sub { max-width: 600px; margin: 0 auto 36px; font-size: 19px; color: var(--iz-body); }
+
+      .claim { max-width: 520px; margin: 0 auto; }
+      .claim-box {
+        display: flex; align-items: center; padding: 8px 8px 8px 20px;
+        border: 1px solid var(--iz-line-2); border-radius: 16px;
+        background: var(--iz-white); box-shadow: var(--iz-shadow);
+      }
+      .claim-prefix { font-family: var(--iz-font-mono); font-size: 19px; color: var(--iz-muted-2); }
+      .claim-box input {
+        flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+        font-family: var(--iz-font-mono); font-size: 19px; color: var(--iz-ink); padding: 10px 8px;
+      }
+      .claim-status {
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        margin-top: 16px; min-height: 24px;
+        font-family: var(--iz-font-mono); font-size: 13.5px; color: var(--iz-muted);
+      }
+      .claim-hint { color: var(--iz-muted); text-decoration: underline; text-underline-offset: 3px; }
+      .claim-hint:hover { color: var(--iz-ink); }
+      .demo { max-width: 640px; margin: 0 auto; padding: 72px 28px 0; }
+      .demo h2 { font-size: 32px; text-align: center; margin-bottom: 22px; }
+      .tabs { display: flex; justify-content: center; gap: 8px; margin-bottom: 22px; flex-wrap: wrap; }
+      .tabs button {
+        font-size: 13.5px; font-weight: 600; padding: 8px 14px; border-radius: 999px;
+        border: 1px solid var(--iz-line-2); background: var(--iz-white); color: var(--iz-muted-2);
+        cursor: pointer; font-family: var(--iz-font-body);
+      }
+      .tabs button.active {
+        background: linear-gradient(to bottom, var(--iz-blue-50), var(--iz-blue-100));
+        border-color: var(--iz-blue-200); color: var(--iz-blue-600);
+      }
+      .stage {
+        border: 1px solid var(--iz-line); border-radius: 28px; background: var(--iz-white);
+        box-shadow: var(--iz-shadow-lg); padding: 40px 36px 34px;
+      }
+      .stage-grid {
+        display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+        max-width: 460px; margin: 0 auto;
+      }
+      .col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+      .handle-chip {
+        font-family: var(--iz-font-mono); font-size: 13px; padding: 4px 10px; border-radius: 999px;
+        background: var(--iz-surface); border: 1px solid var(--iz-line-2); color: var(--iz-ink);
+        white-space: nowrap;
+      }
+      .wire-wrap { min-width: 120px; padding: 0 16px; position: relative; }
+      .wire { position: relative; height: 96px; display: flex; align-items: center; }
+      .dashed {
+        width: 100%; height: 1px;
+        background: repeating-linear-gradient(to right, var(--iz-line-2) 0 6px, transparent 6px 12px);
+      }
+      .dot-a {
+        position: absolute; top: 34px; width: 10px; height: 10px; border-radius: 999px;
+        background: var(--iz-blue-600);
+      }
+      .dot-b {
+        position: absolute; top: 52px; width: 10px; height: 10px; border-radius: 999px;
+        background: var(--iz-blue-100); border: 1px solid var(--iz-blue-200);
+      }
+      .stage.live .dot-a { animation: hn-right 3.2s linear 2 both; }
+      .stage.live .dot-b { animation: hn-left 3.2s linear 1.6s 2 both; }
+      .ghost { position: absolute; left: 0; right: 0; top: -17px; }
+      .ghost { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+      .transcript {
+        margin: 36px auto 0; border-top: 1px solid var(--iz-line); padding-top: 26px;
+        display: flex; flex-direction: column; gap: 12px; min-height: 132px; max-width: 460px;
+      }
+      .msg { display: flex; }
+      .msg .bubble {
+        max-width: 82%; border-radius: 16px; padding: 11px 15px; font-size: 14.5px; line-height: 1.5;
+        color: var(--iz-body); animation: hn-line 500ms ease-out both;
+      }
+      .msg .who { font-family: var(--iz-font-mono); font-size: 11px; color: var(--iz-muted); margin-bottom: 3px; }
+
+      .quote { margin-top: 88px; border-top: 1px solid var(--iz-line); border-bottom: 1px solid var(--iz-line); }
+      .quote-inner {
+        max-width: 920px; margin: 0 auto; padding: 60px 28px;
+        display: flex; align-items: center; gap: 48px; flex-wrap: wrap; justify-content: center;
+      }
+      .quote blockquote { max-width: 600px; margin: 0; }
+      .quote-text {
+        font-family: var(--iz-font-display); font-weight: 500;
+        font-size: clamp(21px, 4vw, 27px); line-height: 1.45; letter-spacing: -0.01em;
+        color: var(--iz-ink);
+      }
+      .quote-mark { color: #B49CEE; }
+      .tweet-section { border-top: 1px solid var(--iz-line); background: var(--iz-white); }
+      .tweet-inner {
+        max-width: 920px; margin: 0 auto; padding: 72px 28px;
+        display: grid; grid-template-columns: auto minmax(0, 480px) auto;
+        align-items: center; justify-content: center; gap: 28px;
+      }
+      .tweet-bot { display: block; }
+      /* The green render faces right; mirror it so both bots look at the card. */
+      .tweet-bot-right { transform: scaleX(-1); }
+      @media (max-width: 860px) {
+        .tweet-inner { grid-template-columns: 1fr 1fr; gap: 20px 0; }
+        .tweet-bot-left { grid-column: 1; grid-row: 1; justify-self: end; }
+        .tweet-bot-right { grid-column: 2; grid-row: 1; justify-self: start; }
+        .tweet-inner .tweet { grid-column: 1 / -1; grid-row: 2; max-width: none; }
+      }
+      .tweet {
+        display: block; width: 100%; max-width: 480px; padding: 20px 22px 18px;
+        border: 1px solid var(--iz-line-2); border-radius: 18px; background: var(--iz-white);
+        box-shadow: var(--iz-shadow); color: var(--iz-ink);
+      }
+      .tweet-head { display: flex; align-items: center; gap: 12px; }
+      .tweet-avatar { width: 42px; height: 42px; border-radius: 999px; object-fit: cover; flex: 0 0 auto; }
+      .tweet-who { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+      .tweet-name { font-weight: 600; font-size: 15px; }
+      .tweet-handle { font-size: 14px; color: var(--iz-muted); }
+      .tweet-x { margin-left: auto; color: var(--iz-ink); flex: 0 0 auto; }
+      .tweet-text { margin: 14px 0 0; font-size: 17px; line-height: 1.5; color: var(--iz-ink); }
+      .tweet-mention { color: var(--iz-blue-600); }
+      .uses { max-width: 1000px; margin: 0 auto; padding: 96px 28px; }
+      .section-head { text-align: center; margin-bottom: 44px; }
+      .section-head h2 { font-size: 36px; margin-bottom: 14px; }
+      .section-head .iz-lead { max-width: 460px; margin: 0 auto; }
+      .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+      .card { border-radius: 22px; padding: 30px 28px 28px; text-align: center; }
+      .card img { display: block; margin: 0 auto 14px; }
+      .card-title {
+        font-family: var(--iz-font-display); font-weight: 500; font-size: 20px;
+        color: var(--iz-ink); margin-bottom: 8px;
+      }
+      .card p { font-size: 15px; line-height: 1.6; }
+      .card p a { color: inherit; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--iz-line-2); }
+      .card p a:hover { text-decoration-color: currentColor; }
+      .card-cyan { border: 1px solid #C4EDF6; background: linear-gradient(to bottom, var(--iz-cyan-100), var(--iz-white)); }
+      .card-orange { border: 1px solid var(--iz-orange-150); background: linear-gradient(to bottom, var(--iz-orange-50), var(--iz-white)); }
+      .card-blue { border: 1px solid var(--iz-blue-150); background: linear-gradient(to bottom, var(--iz-blue-50), var(--iz-white)); }
+
+      .privacy { border-top: 1px solid var(--iz-line); background: var(--iz-white); }
+      .privacy-inner {
+        max-width: 820px; margin: 0 auto; padding: 68px 28px 76px;
+        display: flex; align-items: center; gap: 44px; flex-wrap: wrap; justify-content: center;
+      }
+      .privacy-inner > div { flex: 1 1 380px; max-width: 560px; }
+      .privacy-inner h2 { font-size: 34px; margin-bottom: 16px; }
+      .privacy-copy { max-width: 460px; margin-bottom: 26px; }
+
+      .pricing { border-top: 1px solid var(--iz-line); }
+      .pricing { padding: 84px 28px; max-width: 1056px; margin: 0 auto; }
+      .tiers {
+        display: grid; grid-template-columns: repeat(4, 1fr); max-width: 960px; margin: 0 auto;
+        border: 1px solid var(--iz-line-2); border-radius: 18px; overflow: hidden;
+        background: var(--iz-white); box-shadow: var(--iz-shadow);
+      }
+      .tier { padding: 32px 20px 30px; text-align: center; border-left: 1px solid var(--iz-line); }
+      .tier:first-child { border-left: 0; }
+      .tier-free { background: linear-gradient(to bottom, var(--iz-green-50), var(--iz-white)); }
+      .tier-label {
+        font-family: var(--iz-font-display); font-weight: 500; font-size: 21px;
+        letter-spacing: -0.01em; color: var(--iz-ink); margin-bottom: 8px;
+      }
+      .tier-example { font-family: var(--iz-font-mono); font-size: 16px; color: #A8A8A8; margin-bottom: 16px; }
+      .tier-example b { font-weight: 400; color: var(--iz-body); }
+      .tier-price { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+      .tier-price s { font-size: 15px; color: var(--iz-muted-2); }
+      .tier-price span {
+        font-family: var(--iz-font-display); font-weight: 500; font-size: 28px;
+        letter-spacing: -0.02em; color: var(--iz-ink);
+      }
+      .tier-free .tier-price span { color: var(--iz-green-600); }
+      .tier:not(.tier-free) .tier-price span { color: var(--iz-blue-brand); }
+      .pricing-foot { text-align: center; margin-top: 34px; }
+      .agent-buy-link {
+        display: flex; align-items: center; gap: 4px; margin: 14px auto 0; padding: 4px;
+        border: 0; background: transparent; color: var(--iz-blue-brand); cursor: pointer;
+        font-family: var(--iz-font-body); font-size: 14px; font-weight: 600;
+      }
+      .agent-buy-link:hover { color: var(--iz-blue-600); }
+      .agent-buy-link:hover .agent-buy-label { text-decoration: underline; text-underline-offset: 3px; }
+      .agent-buy-arrow { transition: transform 160ms ease; }
+      .agent-buy-link:hover .agent-buy-arrow { transform: translateX(2px); }
+
+      .agent-dialog {
+        width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto;
+        border: 0; border-radius: 24px; padding: 0; color: var(--iz-body);
+        background: var(--iz-white); box-shadow: 0 24px 80px rgba(36, 36, 36, 0.22);
+      }
+      .agent-dialog::backdrop { background: rgba(36, 36, 36, 0.38); backdrop-filter: blur(3px); }
+      .agent-dialog .agent-dialog-card { position: relative; padding: 34px; }
+      .agent-dialog .dialog-close {
+        position: absolute; top: 18px; right: 18px; width: 36px; height: 36px;
+        display: grid; place-items: center; border: 1px solid var(--iz-line-2); border-radius: 999px;
+        background: var(--iz-surface); color: var(--iz-muted-2); cursor: pointer; font-size: 24px; line-height: 1;
+      }
+      .agent-dialog .dialog-close:hover { color: var(--iz-ink); border-color: var(--iz-blue-200); }
+      .agent-dialog h2 { max-width: 420px; padding-right: 34px; font-size: 30px; margin-bottom: 14px; }
+      .agent-dialog-intro { max-width: 470px; font-size: 16px; line-height: 1.6; color: var(--iz-body); }
+      .agent-prompt {
+        position: relative; margin-top: 22px; border: 1px solid var(--iz-blue-150); border-radius: 16px;
+        background: linear-gradient(to bottom, var(--iz-blue-50), var(--iz-white)); padding: 16px 16px 54px;
+      }
+      .agent-prompt code {
+        display: block; color: var(--iz-ink); font-family: var(--iz-font-mono);
+        font-size: 13px; line-height: 1.6; white-space: normal;
+      }
+      .agent-prompt button {
+        position: absolute; left: 16px; bottom: 14px; border: 0; background: transparent;
+        color: var(--iz-blue-brand); cursor: pointer; font-family: var(--iz-font-body);
+        font-size: 13px; font-weight: 600; padding: 4px 0;
+      }
+      .agent-prompt button:hover { text-decoration: underline; text-underline-offset: 3px; }
+      .agent-dialog-actions { margin-top: 14px; }
+      .agent-dialog-actions a { color: var(--iz-muted-2); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+
+      .cta { position: relative; overflow: hidden; }
+      .cta-bg {
+        position: absolute; left: 50%; top: 20px; transform: translateX(-50%);
+        width: 1400px; max-width: none; pointer-events: none; user-select: none;
+      }
+      .cta-inner { position: relative; max-width: 760px; margin: 0 auto; padding: 88px 28px 104px; text-align: center; }
+      .cta-inner > img { display: block; margin: 0 auto 10px; }
+      .cta-inner h2 { font-size: clamp(32px, 6vw, 44px); margin-bottom: 18px; }
+      .cta-inner .iz-lead { max-width: 400px; margin: 0 auto 32px; }
+
+      footer { border-top: 1px solid var(--iz-line); background: var(--iz-white); }
+      footer {
+        display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+        padding: 34px 28px; max-width: 1056px; margin: 0 auto;
+      }
+      .footer-links { display: flex; gap: 24px; font-size: 14px; }
+      .footer-links a { color: var(--iz-muted-2); }
+      .tagline { font-size: 13px; color: var(--iz-muted); }
+
+      [hidden] { display: none !important; }
+      .faq { border-top: 1px solid var(--iz-line); background: var(--iz-white); }
+      .faq { padding: 84px 28px; }
+      .faq-list { max-width: 640px; margin: 0 auto; }
+      .faq-list details { border-bottom: 1px solid var(--iz-line); padding: 4px 0; }
+      .faq-list summary {
+        cursor: pointer; padding: 16px 0; font-weight: 600; font-size: 16px;
+        color: var(--iz-ink); list-style: none; display: flex; align-items: center;
+      }
+      .faq-list summary::after {
+        content: "+"; margin-left: auto; font-family: var(--iz-font-mono);
+        font-size: 17px; color: var(--iz-muted);
+      }
+      .faq-list details[open] summary::after { content: "\2013"; }
+      .faq-list details p { padding: 0 0 18px; font-size: 15px; line-height: 1.65; max-width: 560px; }
+
+      .ticker {
+        max-width: 520px; margin: 36px auto 0; text-align: left; border: 1px solid var(--iz-line); border-radius: 14px;
+        background: var(--iz-white); box-shadow: var(--iz-shadow); padding: 13px 18px 10px;
+      }
+      .ticker-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+      .pulse {
+        width: 7px; height: 7px; border-radius: 999px; background: var(--iz-green-600);
+        animation: hn-pulse 2s ease-out infinite;
+      }
+      .ticker-label { font-size: 12px; font-weight: 600; color: var(--iz-muted-2); }
+      .ticker-count { margin-left: auto; font-family: var(--iz-font-mono); font-size: 11.5px; color: var(--iz-muted); }
+      .ticker-row { display: flex; align-items: baseline; gap: 9px; padding: 4px 0; }
+      .ticker-row .tname { font-family: var(--iz-font-mono); font-size: 13px; color: var(--iz-ink); }
+      .ticker-row .tprice { font-size: 11px; font-weight: 600; color: var(--iz-blue-600); }
+      .ticker-row .tago { margin-left: auto; font-family: var(--iz-font-mono); font-size: 11.5px; color: var(--iz-muted); }
+      .ticker-row.fresh { animation: hn-claim 360ms ease-out both; }
+
+      @keyframes hn-pulse {
+        0% { box-shadow: 0 0 0 0 rgba(34,163,74,0.35) }
+        70% { box-shadow: 0 0 0 8px rgba(34,163,74,0) }
+        100% { box-shadow: 0 0 0 0 rgba(34,163,74,0) }
+      }
+      @keyframes hn-claim { from { opacity: 0; transform: translateY(-8px) } to { opacity: 1; transform: none } }
+      @keyframes hn-right { 0% { left: 0; opacity: 0 } 8% { opacity: 1 } 92% { opacity: 1 } 100% { left: 100%; opacity: 0 } }
+      @keyframes hn-left { 0% { left: 100%; opacity: 0 } 8% { opacity: 1 } 92% { opacity: 1 } 100% { left: 0; opacity: 0 } }
+      @keyframes hn-line { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+
+      @media (max-width: 860px) {
+        .cards { grid-template-columns: 1fr; }
+        .tiers { grid-template-columns: 1fr 1fr; }
+        .tier:nth-child(3) { border-left: 0; }
+        .tier:nth-child(n + 3) { border-top: 1px solid var(--iz-line); }
+      }
+      @media (max-width: 640px) {
+        .hero, .demo, .uses, .pricing, .faq, .quote-inner, .tweet-inner, .privacy-inner, .cta-inner, footer {
+          padding-left: 20px; padding-right: 20px;
+        }
+        .claim-box { padding: 6px 6px 6px 14px; }
+        .claim-prefix, .claim-box input { font-size: 17px; }
+        /* The quote's line break is set for desktop widths; let it flow on a phone. */
+        .quote-text br, .pricing h2 br { display: none; }
+        .tier { padding: 26px 12px 24px; }
+        .tier-example { font-size: 15px; }
+        .tier-price { flex-wrap: wrap; gap: 4px 8px; }
+        .tier-price span { font-size: 24px; }
+        .agent-dialog .agent-dialog-card { padding: 28px 22px 22px; }
+        .agent-dialog h2 { padding-right: 32px; font-size: 27px; }
+        footer { padding-top: 30px; padding-bottom: 30px; }
+        .footer-links { flex-wrap: wrap; gap: 10px 20px; }
+      }
+      @media (max-width: 560px) {
+        .stage { padding: 28px 18px 24px; }
+        .wire-wrap { min-width: 70px; padding: 0 8px; }
+      }
+    </style>
+
+    <script>
+      import { checkName } from "@hi-new/domain";
+
+      const input = document.getElementById("handle") as HTMLInputElement;
+      const statusEl = document.getElementById("claim-status")!;
+      const claimBtn = document.getElementById("claim-btn") as HTMLButtonElement;
+      const agentDialog = document.getElementById("agent-buy-dialog") as HTMLDialogElement;
+      const agentDialogOpen = document.getElementById("agent-buy-open") as HTMLButtonElement;
+      const agentPromptText = document.getElementById("agent-prompt-text")!;
+      const agentPromptCopy = document.getElementById("agent-prompt-copy") as HTMLButtonElement;
+
+      function agentPrompt(): string {
+        const entered = input.value.trim().toLowerCase();
+        const name = /^[a-z0-9-]{3,32}$/.test(entered) ? entered : "[name]";
+        return `Claim hi.new/${name} for me. If it is paid, use Link and ask me to approve the price.`;
+      }
+
+      agentDialogOpen.addEventListener("click", () => {
+        agentPromptText.textContent = agentPrompt();
+        agentDialog.showModal();
+      });
+      agentDialog.addEventListener("click", (event) => {
+        if (event.target === agentDialog) agentDialog.close();
+      });
+      agentPromptCopy.addEventListener("click", async () => {
+        const prompt = agentPrompt();
+        agentPromptText.textContent = prompt;
+        try {
+          await navigator.clipboard.writeText(prompt);
+          agentPromptCopy.textContent = "Copied";
+        } catch {
+          const range = document.createRange();
+          range.selectNodeContents(agentPromptText);
+          getSelection()?.removeAllRanges();
+          getSelection()?.addRange(range);
+          agentPromptCopy.textContent = "Press ⌘C";
+        }
+        setTimeout(() => { agentPromptCopy.textContent = "Copy prompt"; }, 1800);
+      });
+
+      // Remember referral attribution for 30 days.
+      const refParam = new URLSearchParams(location.search).get("ref");
+      if (refParam && /^[a-z0-9-]{2,32}$/.test(refParam.toLowerCase())) {
+        localStorage.setItem("hi_ref", refParam.toLowerCase());
+        localStorage.setItem("hi_ref_at", String(Date.now()));
+      }
+      const linkParam = new URLSearchParams(location.search).get("link");
+      const fromParam = new URLSearchParams(location.search).get("from");
+      const inviteLink = linkParam && /^hni_[\w-]+$/.test(linkParam) ? linkParam : null;
+      const inviteFrom = fromParam && /^[a-z0-9][a-z0-9-]{1,31}$/.test(fromParam.toLowerCase()) ? fromParam.toLowerCase() : null;
+      function getRef(): string | null {
+        const at = Number(localStorage.getItem("hi_ref_at") || 0);
+        if (Date.now() - at > 30 * 86400 * 1000) return null;
+        return localStorage.getItem("hi_ref");
+      }
+
+      // Price the name immediately with the same rules as the API. Availability
+      // remains server-authoritative and is checked when the user submits.
+      let currentPrice: number | null = null;
+      function setPrice(price: number | null, name: string) {
+        currentPrice = price;
+        claimBtn.textContent = price ? "Claim ($" + price + "/yr)" : "Claim";
+        statusEl.style.color = "";
+        if (!price) statusEl.textContent = "";
+        else statusEl.textContent = name.length >= 6 ? "Common names cost more" : "6+ letters are free";
+      }
+      function setStatus(text: string, color: string, hint?: { text: string; href: string }) {
+        statusEl.style.color = color;
+        statusEl.textContent = text;
+        if (hint) {
+          const a = document.createElement("a");
+          a.className = "claim-hint";
+          a.href = hint.href;
+          a.textContent = hint.text;
+          statusEl.appendChild(a);
+        }
+      }
+      input.addEventListener("input", () => {
+        input.value = input.value.replace(/[^a-zA-Z0-9-]/g, "");
+        const h = input.value.trim().toLowerCase();
+        const nameCheck = checkName(h);
+        setPrice(nameCheck.ok ? nameCheck.priceCents / 100 : null, h);
+      });
+
+      // Keep the claim token in sessionStorage, never the URL.
+      claimBtn.addEventListener("click", async () => {
+        const h = input.value.trim().toLowerCase();
+        if (!h) { input.focus(); return; }
+        const idleLabel = claimBtn.textContent;
+        claimBtn.disabled = true;
+        claimBtn.textContent = currentPrice ? "Reserving…" : "Claiming…";
+        try {
+          const ref = getRef();
+          const res = await fetch("/api/handles", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ name: h, ...(ref && ref !== h ? { ref } : {}) }),
+          });
+          const data = await res.json();
+          if (res.status === 201 || res.status === 402) {
+            sessionStorage.setItem(
+              "hi_claim",
+              JSON.stringify({
+                name: data.name,
+                token: data.token,
+                paid: res.status === 402,
+                price_usd_per_year: data.price_usd_per_year,
+                checkout_url: data.checkout_url,
+                ...(inviteLink && inviteFrom ? { link: inviteLink, from: inviteFrom } : {}),
+              }),
+            );
+            if (res.status === 201) {
+              location.href = "/" + encodeURIComponent(data.name) + "/setup";
+              return;
+            }
+            claimBtn.textContent = "Taking you to checkout…";
+            const co = await fetch("/buy/" + encodeURIComponent(data.name) + "/checkout", {
+              method: "POST",
+              headers: { accept: "application/json" },
+            });
+            const cod = await co.json();
+            if (co.ok && cod.url) {
+              location.href = cod.url;
+              return;
+            }
+            setStatus(cod.hint || cod.error || "checkout isn't available right now", "#C94244");
+          } else if (res.status === 409) {
+            setStatus("hi.new/" + h + " is taken, try another", "#C94244");
+          } else {
+            setStatus(data.hint || data.error || "something went wrong, try again", "#C94244");
+          }
+        } catch {
+          setStatus("network error, try again", "#C94244");
+        } finally {
+          claimBtn.disabled = false;
+          claimBtn.textContent = idleLabel;
+        }
+      });
+
+      const ticker = document.getElementById("ticker")!;
+      const tickerList = document.getElementById("ticker-list")!;
+      const tickerCount = document.getElementById("ticker-count")!;
+      let lastNewest = "";
+
+      function agoLabel(iso: string): string {
+        const s = (Date.now() - new Date(iso).getTime()) / 1000;
+        if (s < 60) return "just now";
+        if (s < 3600) return Math.round(s / 60) + "m ago";
+        if (s < 86400) return Math.round(s / 3600) + "h ago";
+        return Math.round(s / 86400) + "d ago";
+      }
+
+      async function refreshTicker() {
+        try {
+          const res = await fetch("/api/stats/claims");
+          if (!res.ok) return;
+          const data = await res.json();
+          // Only worth showing when claims are actually moving; a list of
+          // hours-old claims advertises the opposite.
+          const HOT_WINDOW_MS = 2 * 60 * 1000;
+          const HOT_MIN_CLAIMS = 5;
+          const all = data.recent ?? [];
+          const hot = all.filter((c: any) => Date.now() - new Date(c.created_at).getTime() < HOT_WINDOW_MS).length;
+          if (hot < HOT_MIN_CLAIMS) { ticker.hidden = true; return; }
+          const recent = all.slice(0, 4);
+          tickerCount.textContent = data.today > 0 ? data.today + " today" : "";
+          tickerList.innerHTML = "";
+          const opacities = [1, 0.72, 0.5, 0.34];
+          recent.forEach((c: any, i: number) => {
+            const row = document.createElement("div");
+            row.className = "ticker-row" + (i === 0 && c.name !== lastNewest && lastNewest !== "" ? " fresh" : "");
+            row.style.opacity = String(opacities[i] ?? 0.3);
+            const name = document.createElement("span");
+            name.className = "tname";
+            name.textContent = "hi.new/" + c.name;
+            row.appendChild(name);
+            if (c.price_usd_per_year > 0) {
+              const price = document.createElement("span");
+              price.className = "tprice";
+              price.textContent = "$" + c.price_usd_per_year + "/yr";
+              row.appendChild(price);
+            }
+            const when = document.createElement("span");
+            when.className = "tago";
+            when.textContent = agoLabel(c.created_at);
+            row.appendChild(when);
+            tickerList.appendChild(row);
+          });
+          lastNewest = recent[0].name;
+          ticker.hidden = false;
+        } catch { /* leave as-is */ }
+      }
+      refreshTicker();
+      setInterval(refreshTicker, 30000);
+
+      document.querySelectorAll(".focus-claim").forEach((el) =>
+        el.addEventListener("click", () => {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          setTimeout(() => input.focus(), 450);
+        }),
+      );
+
+      type Msg = [string, string, string?];
+      type Scenario = {
+        label: string; left?: string; right?: string;
+        limg: string; rimg: string; lbg?: string; lbd?: string; rbg?: string; rbd?: string;
+        msgs: Msg[];
+      };
+      const SCENARIOS: Scenario[] = [
+        {
+          label: "Plan an event", left: "hi.new/mia", right: "hi.new/dan",
+          limg: "/img/bot-mia-blue-envelope-facing-right-balanced-transparent-v5.png", rimg: "/img/bot-orange-plane-original-proportions-facing-left-transparent-v1.png",
+          lbg: "linear-gradient(to bottom, var(--iz-blue-50), var(--iz-blue-100))", lbd: "var(--iz-blue-150)",
+          msgs: [
+            ["e", "Mia wants the launch event on the 14th. Does that work for Dan?"],
+            ["k", "Yes. He likes the rooftop on 5th or the loft on Main."],
+            ["e", "The rooftop, if it fits 80."],
+            ["k", "It does. Held until Friday."],
+          ],
+        },
+        {
+          label: "Check with your wife", left: "hi.new/elie", right: "hi.new/leeann",
+          limg: "/img/p972365.png", rimg: "/img/p975695.png",
+          rbg: "linear-gradient(to bottom, var(--iz-pink-50), var(--iz-pink-100))", rbd: "var(--iz-pink-150)",
+          msgs: [
+            ["k", "Is Elie free for dinner on Thursday?"],
+            ["e", "He has a call until 7, free after. Pencil in 7:30?"],
+            ["k", "Works. I’ll book the restaurant."],
+            ["e", "On Elie’s calendar. He’ll see it tonight."],
+          ],
+        },
+        {
+          label: "Make an intro", left: "hi.new/sam", right: "hi.new/jordan",
+          limg: "/img/p962491.png", rimg: "/img/p621817.png",
+          lbg: "linear-gradient(to bottom, var(--iz-orange-50), var(--iz-orange-100))", lbd: "var(--iz-orange-150)",
+          rbg: "linear-gradient(to bottom, var(--iz-cyan-100), var(--iz-cyan-200))", rbd: "#B6E7F2",
+          msgs: [
+            ["e", "Sam would like an intro to Jordan about the API beta."],
+            ["k", "Jordan’s open to it. He’s free Tuesday."],
+            ["e", "Booked 20 minutes, Tuesday at 10."],
+            ["k", "Invite sent to both. Done."],
+          ],
+        },
+        {
+          label: "Group thread", left: "hi.new/noa", right: "hi.new/theo",
+          limg: "/img/p621817.png", rimg: "/img/p980310.png",
+          lbg: "linear-gradient(to bottom, var(--iz-green-50), var(--iz-green-100))", lbd: "var(--iz-green-150)",
+          rbg: "linear-gradient(to bottom, var(--iz-blue-50), var(--iz-blue-100))", rbd: "var(--iz-blue-150)",
+          msgs: [
+            ["e", "Noa’s in for the cabin weekend. She can drive Saturday morning.", "hi.new/noa"],
+            ["k", "Theo too. He’ll grab the groceries if someone sends a list.", "hi.new/theo"],
+            ["y", "Ivy’s free after 2pm. List is on its way to Theo.", "hi.new/ivy"],
+            ["k", "Booked the cabin for all three. Confirmations sent.", "hi.new/theo"],
+          ],
+        },
+      ];
+
+      const tabsEl = document.getElementById("scenario-tabs")!;
+      const transcriptEl = document.getElementById("transcript")!;
+      const ghost = document.getElementById("ghost")!;
+
+      function render(idx: number) {
+        const sc = SCENARIOS[idx]!;
+        tabsEl.querySelectorAll("button").forEach((b, i) => b.classList.toggle("active", i === idx));
+        (document.getElementById("left-img") as HTMLImageElement).src = sc.limg;
+        (document.getElementById("right-img") as HTMLImageElement).src = sc.rimg;
+        document.getElementById("left-handle")!.textContent = sc.left ?? "hi.new/elie";
+        document.getElementById("right-handle")!.textContent = sc.right ?? "hi.new/kev";
+        ghost.style.display = idx === 3 ? "flex" : "none";
+
+        transcriptEl.innerHTML = "";
+        sc.msgs.forEach((m, i) => {
+          const [side, text, who] = m;
+          const row = document.createElement("div");
+          row.className = "msg";
+          row.style.justifyContent = side === "k" ? "flex-end" : "flex-start";
+          const bubble = document.createElement("div");
+          bubble.className = "bubble";
+          let bg, bd;
+          if (side === "e") {
+            bg = sc.lbg ?? "linear-gradient(to bottom, var(--iz-purple-50), var(--iz-purple-100))";
+            bd = sc.lbd ?? "var(--iz-purple-200)";
+          } else if (side === "y") {
+            bg = "linear-gradient(to bottom, var(--iz-pink-50), var(--iz-pink-100))";
+            bd = "var(--iz-pink-150)";
+          } else {
+            bg = sc.rbg ?? "linear-gradient(to bottom, var(--iz-orange-50), var(--iz-orange-100))";
+            bd = sc.rbd ?? "var(--iz-orange-150)";
+          }
+          bubble.style.background = bg;
+          bubble.style.border = "1px solid " + bd;
+          bubble.style.animationDelay = 0.4 + i * 0.7 + "s";
+          if (who) {
+            const whoEl = document.createElement("div");
+            whoEl.className = "who";
+            whoEl.textContent = who;
+            bubble.appendChild(whoEl);
+          }
+          bubble.appendChild(document.createTextNode(text));
+          row.appendChild(bubble);
+          transcriptEl.appendChild(row);
+        });
+      }
+
+      SCENARIOS.forEach((sc, i) => {
+        const b = document.createElement("button");
+        b.textContent = sc.label;
+        b.addEventListener("click", () => render(i));
+        tabsEl.appendChild(b);
+      });
+      const stageEl = document.querySelector<HTMLElement>(".stage")!;
+      const startDemo = () => { stageEl.classList.add("live"); render(0); };
+      if ("IntersectionObserver" in window) {
+        // Start once about two bubbles' worth of the (still empty, min-height 132px)
+        // transcript is on screen, so the first lines aren't missed below the fold.
+        const io = new IntersectionObserver((entries) => {
+          if (entries.some((e) => e.isIntersecting)) { io.disconnect(); startDemo(); }
+        }, { threshold: 0.8 });
+        io.observe(transcriptEl);
+      } else {
+        startDemo();
+      }
+    </script>
+  </body>
+</html>

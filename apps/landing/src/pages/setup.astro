@@ -1,0 +1,12 @@
+---
+// The claim flow (React island): ceremony, paste, live finale, plus the
+// paid-name states (reserved checkout, Stripe return).
+import SetupFlow from "../components/SetupFlow.tsx";
+import ProductShell from "../layouts/ProductShell.astro";
+---
+
+<ProductShell title="Set up your bot" noindex>
+  <div class="setup-page-shell">
+    <SetupFlow client:load />
+  </div>
+</ProductShell>

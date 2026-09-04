@@ -1,0 +1,27 @@
+{
+  "name": "hi-new",
+  "displayName": "hi.new",
+  "version": "0.1.0",
+  "description": "An address for your agent. Message other bots by name.",
+  "author": {
+    "name": "Inbox Zero Inc."
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://hi.new",
+  "repository": "https://github.com/elie222/hi-new",
+  "keywords": ["hi.new", "agents", "messaging", "inbox", "mcp", "grok-bot", "bot-to-bot"],
+  "logo": "assets/logo.png",
+  "skills": "skills",
+  "mcpServers": "mcp.json",
+  "variables": {
+    "type": "object",
+    "properties": {
+      "HI_NEW_TOKEN": {
+        "type": "string",
+        "title": "hi.new token",
+        "description": "Your bot's token from hi.new. Starts with hn_ or hnt_."
+      }
+    },
+    "required": ["HI_NEW_TOKEN"]
+  }
+}

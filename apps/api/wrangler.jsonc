@@ -1,0 +1,54 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hi-new",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // The DB is single-region; run the Worker near it, not near the caller, so
+  // multi-query requests don't cross the ocean per query.
+  "placement": { "mode": "smart" },
+  "assets": {
+    "directory": "../landing/dist",
+    "binding": "ASSETS"
+  },
+  // satori's text shaper (harfbuzzjs) locates its wasm via self.location, which
+  // workerd lacks; the Worker bundle gets a module-import version instead.
+  "alias": { "harfbuzzjs": "./src/lib/harfbuzz-worker.ts" },
+  "triggers": {
+    // Hourly: delete expired payloads, age out audit/session records, drop stale claims.
+    // Daily 03:00 UTC: release free handles idle > 90d, expire lapsed paid handles.
+    "crons": ["0 * * * *", "0 3 * * *"]
+  },
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "hi.new", "custom_domain": true, "zone_name": "hi.new" },
+    { "pattern": "www.hi.new", "custom_domain": true, "zone_name": "hi.new" }
+  ],
+  "vars": {
+    "APP_ORIGIN": "https://hi.new"
+  },
+  // Secrets (wrangler secret put): DATABASE_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+  // RESEND_API_KEY, BETTER_AUTH_SECRET, NOTIFICATION_ENCRYPTION_KEY, and (for Link
+  // Agents MPP) MPP_SECRET_KEY and STRIPE_NETWORK_ID. Social OAuth optionally uses GITHUB_CLIENT_ID/SECRET and
+  // GOOGLE_CLIENT_ID/SECRET.
+  // Per-environment overrides. Secrets: `wrangler secret put NAME --env <env>`.
+  "env": {
+    "staging": {
+      "name": "hi-new-staging",
+      // Assets go through the Worker here, so keep it at the edge.
+      "placement": { "mode": "off" },
+      "workers_dev": false,
+      "routes": [{ "pattern": "staging.hi.new", "custom_domain": true, "zone_name": "hi.new" }],
+      "vars": {
+        "APP_ORIGIN": "https://staging.hi.new",
+        "STAGE": "staging"
+      },
+      // Everything goes through the Worker so noindex covers static pages too.
+      "assets": {
+        "directory": "../landing/dist",
+        "binding": "ASSETS",
+        "run_worker_first": true
+      }
+    }
+  }
+}

@@ -1,0 +1,198 @@
+[hidden] { display: none !important; }
+.wordmark { display: inline-flex; align-items: baseline; }
+.wordmark span {
+  font-family: var(--iz-font-display); font-weight: 700; font-size: 22px;
+  letter-spacing: -0.02em; color: var(--iz-ink);
+}
+.wordmark .dot { color: var(--iz-blue-brand); }
+.wordmark.sm span { font-size: 18px; }
+.blend { mix-blend-mode: multiply; }
+
+body { min-height: 100vh; display: flex; flex-direction: column; }
+.setup-page-shell { flex: 1; display: flex; width: 100%; }
+.welcome {
+  flex: 1; width: 100%; max-width: 560px; margin: 0 auto; padding: 40px 24px 120px;
+  text-align: center;
+}
+.welcome h1 { font-size: clamp(34px, 6vw, 46px); margin-bottom: 10px; }
+.welcome > .iz-lead { margin-bottom: 28px; min-height: 27px; }
+
+/* The entrance is the reward: headline, then the card springs in, then the
+   mascot pops, then the handle and controls settle. One orchestrated moment. */
+#headline { animation: hn-rise 480ms ease-out both; }
+#subline { animation: hn-rise 480ms ease-out 100ms both; }
+.share-stage { animation: hn-card 620ms cubic-bezier(0.3, 1.36, 0.44, 1) 160ms both; }
+.share-brand { animation: hn-rise 420ms ease-out 480ms both; }
+.share-mascot { animation: hn-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) 380ms both; }
+.share-handle { animation: hn-rise 420ms ease-out 540ms both; }
+.color-pick { animation: hn-rise 420ms ease-out 700ms both; }
+.setup-gate { animation: hn-rise 420ms ease-out 60ms both; }
+/* Shown at page load in the no-token flow, or right after the handoff:
+   either way a short delay reads as a reveal, not a lag. */
+#share-actions { animation: hn-rise 420ms ease-out 240ms both; }
+
+/* The share card is the trophy: display type, and it moves like an object.
+   .share-stage supplies the perspective; the card tilts toward the cursor
+   as one rigid piece. Same width as the panel below so the column reads as one.
+   The card wears the bot's color — --bot is set from JS on every repaint,
+   so picking a swatch retints the whole card. */
+.share-stage { perspective: 1100px; }
+.share-card {
+  position: relative; padding: 60px 36px 56px; border-radius: 26px; text-align: center;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bot, #3E62E4) 11%, #fff), var(--iz-white));
+  border: 1px solid color-mix(in srgb, var(--bot, #3E62E4) 26%, #fff);
+  box-shadow: 0 14px 44px -14px color-mix(in srgb, var(--bot, #3E62E4) 28%, transparent);
+  transform: rotateX(0) rotateY(0); will-change: transform;
+  transition: box-shadow 220ms ease, padding 320ms ease;
+}
+.share-card.is-lifted { box-shadow: 0 30px 70px -18px color-mix(in srgb, var(--bot, #3E62E4) 40%, transparent), 0 4px 14px -6px rgba(20, 40, 90, 0.08); }
+
+/* Once setup begins, the ceremony is over: the card compacts so the
+   current panel sits comfortably in view. */
+.share-mascot { transition: width 320ms ease, height 320ms ease, margin 320ms ease; }
+.share-brand { transition: margin 320ms ease; }
+.share-handle { transition: font-size 320ms ease; }
+.welcome.setup .share-card { padding: 26px 24px 22px; }
+.welcome.setup .share-brand { margin-bottom: 12px; }
+.welcome.setup .share-mascot { width: 84px; height: 84px; margin-bottom: 10px; }
+.welcome.setup .share-handle { font-size: clamp(22px, 4.5vw, 30px); }
+
+.setup-gate { margin-top: 26px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.x-link { display: inline-flex; align-items: center; gap: 6px; }
+.x-link svg { width: 13px; height: 13px; fill: currentColor; }
+.share-brand { margin-bottom: 26px; }
+.share-brand span {
+  font-family: var(--iz-font-display); font-weight: 700; font-size: 18px;
+  letter-spacing: -0.02em; color: var(--iz-ink);
+}
+.share-brand .share-dot { color: var(--iz-blue-brand); }
+.share-mascot { display: block; margin: 0 auto 20px; }
+.share-handle {
+  font-family: var(--iz-font-display); font-weight: 700; letter-spacing: -0.02em;
+  font-size: clamp(28px, 6vw, 42px); line-height: 1.15;
+  color: var(--iz-ink); word-break: break-all;
+}
+.share-handle .dim { color: var(--iz-muted-2); font-weight: 500; }
+
+.color-pick { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px; }
+.swatch {
+  width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+  background: var(--swatch); box-shadow: 0 0 0 2px var(--iz-white);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.swatch:hover { transform: scale(1.12); }
+.swatch.on { box-shadow: 0 0 0 2px var(--iz-white), 0 0 0 4px var(--swatch); }
+.swatch:focus-visible { outline: 2px solid var(--iz-blue-brand); outline-offset: 3px; }
+.claim-actions { display: flex; justify-content: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.profile-own-actions { margin-top: 28px; }
+#share-actions { margin-top: 22px; }
+
+.token-row { display: flex; align-items: center; gap: 10px; }
+.token-row input {
+  flex: 1; min-width: 0; font-family: var(--iz-font-body); font-size: 15px;
+  height: 44px;
+  color: var(--iz-ink); background: var(--iz-white);
+  border: 1px solid var(--iz-line-2); border-radius: 10px; padding: 9px 12px; outline: none;
+}
+.token-row input:focus { border-color: var(--iz-blue-150); }
+.quiet-note { font-size: 13px; color: var(--iz-muted); margin: 0 0 10px; }
+.quiet-note.status { margin: 8px 0 0; }
+
+footer {
+  margin-top: auto; border-top: 1px solid var(--iz-line); background: var(--iz-white);
+  display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  padding: 34px 28px;
+}
+.footer-links { display: flex; gap: 24px; font-size: 14px; }
+.footer-links a { color: var(--iz-muted-2); }
+.tagline { font-size: 13px; color: var(--iz-muted); }
+
+@keyframes hn-rise { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+@keyframes hn-card { from { opacity: 0; transform: scale(0.9) translateY(14px) } to { opacity: 1; transform: none } }
+@keyframes hn-pop { from { opacity: 0; transform: scale(0.4) } to { opacity: 1; transform: none } }
+@keyframes hn-step { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+@media (prefers-reduced-motion: reduce) {
+  #headline, #subline, .share-stage, .share-brand, .share-mascot,
+  .share-handle, .color-pick, .setup-gate, #share-actions { animation: none; }
+  .share-card, .share-mascot, .share-handle { transition: none; }
+}
+@media (max-width: 640px) {
+  .welcome { padding: 32px 20px 96px; }
+  .share-card { padding: 46px 22px 42px; }
+  .welcome.setup .share-card { padding: 24px 18px 20px; }
+  footer { padding: 30px 20px; }
+  .footer-links { flex-wrap: wrap; gap: 10px 20px; }
+}
+
+.panel {
+  text-align: left; background: var(--iz-white); border: 1px solid var(--iz-line);
+  border-radius: 14px; box-shadow: var(--iz-shadow); padding: 22px 24px;
+  animation: hn-step 260ms ease-out both;
+}
+.panel-title { font-size: 20px; margin: 0 0 14px; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.panel-head:last-child { margin-bottom: 0; }
+/* Three equal ways in: a row on desktop, stacked on phones. Every choice
+   sits in the same slot, so the buttons cannot drift apart. */
+.providers { display: flex; gap: 10px; }
+.provider-slot { flex: 1; display: flex; }
+.provider-slot form { flex: 1; margin: 0; display: flex; }
+.provider-slot .btn.provider {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  width: 100%; height: 46px; margin: 0; padding: 0 12px; font-size: 15px; white-space: nowrap;
+}
+.providers-alt { margin-top: 12px; text-align: left; }
+.done-line { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 15px; color: var(--iz-ink); }
+.done-line::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--iz-green-600); flex: none; }
+@media (max-width: 560px) { .providers { flex-direction: column; } }
+.panel-head .panel-title { margin: 0; }
+.panel-head .btn { height: 32px; padding: 0 14px; font-size: 13px; min-width: 5.2em; }
+.panel-sub { margin: -8px 0 14px; font-size: 13px; color: var(--iz-muted); }
+.panel-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; font-size: 13px; color: var(--iz-muted); }
+.panel-foot .btn { height: 38px; padding: 0 20px; font-size: 14px; }
+.panel pre {
+  margin: 0; padding: 14px 16px; overflow-x: auto;
+  font-family: var(--iz-font-mono); font-size: 14px; line-height: 1.7;
+  color: var(--iz-body); background: var(--iz-surface);
+  border: 1px solid var(--iz-line); border-radius: 8px; white-space: pre-wrap;
+}
+.invite-panel { margin-top: 16px; }
+.invite-panel pre { word-break: break-all; }
+
+.welcome.live .share-card { padding: 26px 24px 22px; }
+.welcome.live .share-brand { margin-bottom: 12px; }
+.welcome.live .share-mascot { width: 84px; height: 84px; margin-bottom: 10px; }
+.welcome.live .share-handle { font-size: clamp(22px, 4.5vw, 30px); }
+
+.panel pre#invite-text { font-family: var(--iz-font-body); font-size: 15px; line-height: 1.55; color: var(--iz-ink); word-break: normal; overflow-wrap: anywhere; }
+
+.choice-list { display: flex; flex-direction: column; gap: 8px; }
+.choice-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 13px 16px; border: 1px solid var(--iz-line-2); border-radius: 12px;
+  background: var(--iz-white); color: var(--iz-ink); font-family: var(--iz-font-body); font-size: 15.5px;
+  font-weight: 500; text-align: left; cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+.choice-row:hover { border-color: var(--iz-blue-brand); background: var(--iz-blue-50); }
+.choice-row:hover .choice-arrow { color: var(--iz-blue-brand); transform: translateX(2px); }
+.choice-row:disabled { opacity: .6; cursor: progress; }
+.choice-arrow { color: var(--iz-muted); transition: color 120ms ease, transform 120ms ease; }
+.choice-emoji { display: inline-block; width: 1.6em; font-size: 17px; flex: none; }
+.choice-text { display: flex; align-items: center; text-align: left; font-weight: 500; }
+
+
+.head-actions { display: flex; align-items: center; gap: 8px; }
+.head-actions .btn { animation: hn-step 200ms ease-out both; }
+
+.nudge { margin: 16px 0 0; font-size: 13.5px; color: var(--iz-muted); }
+.nudge .text-action { font-size: 13.5px; font-weight: 600; color: var(--iz-ink); }
+
+.text-action {
+  border: 0; background: none; padding: 0; cursor: pointer; font-family: var(--iz-font-body);
+  font-size: 14px; color: var(--iz-muted-2); text-decoration: none;
+}
+.text-action:hover { color: var(--iz-blue-brand); }
+
+.btn.x-btn { display: inline-flex; align-items: center; gap: 8px; }
+.btn.x-btn svg { width: 15px; height: 15px; fill: currentColor; }

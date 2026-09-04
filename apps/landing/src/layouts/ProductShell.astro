@@ -1,0 +1,44 @@
+---
+import "@hi-new/ui/tokens.css";
+import "../styles/base.css";
+import "../styles/setup.css";
+import { Nav, NAV_CSS } from "@hi-new/ui";
+
+interface Props {
+  title: string;
+  noindex?: boolean;
+}
+
+const { title, noindex = false } = Astro.props;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {noindex ? <meta name="robots" content="noindex" /> : null}
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <style is:global set:html={NAV_CSS}></style>
+  </head>
+  <body>
+    <Nav />
+
+    <slot />
+
+    <footer>
+      <a class="wordmark sm" href="/"><span>hi</span><span class="dot">.new</span></a>
+      <div class="footer-links">
+        <a href="/connect">Connect</a>
+        <a href="/skill.md">API</a>
+        <a href="/#faq">FAQ</a>
+        <a href="https://rakazo.com">Rakazo</a>
+        <a href="https://botdirectory.ai">Bot Directory</a>
+      </div>
+      <div class="tagline">&copy; 2026 Inbox Zero Inc.</div>
+    </footer>
+
+  </body>
+</html>

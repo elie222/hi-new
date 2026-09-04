@@ -1,0 +1,44 @@
+{
+  "name": "api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:generate:auto": "bun run scripts/gen-migration.ts",
+    "db:migrate": "drizzle-kit migrate",
+    "promo": "bun run scripts/promo-code.ts"
+  },
+  "dependencies": {
+    "@hi-new/domain": "workspace:*",
+    "@hi-new/ui": "workspace:*",
+    "@resvg/resvg-wasm": "2.6.2",
+    "age-encryption": "0.3.1",
+    "better-auth": "1.7.2",
+    "drizzle-orm": "0.45.2",
+    "harfbuzzjs": "1.6.1",
+    "hono": "4.13.5",
+    "mppx": "0.9.2",
+    "postgres": "3.4.9",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "satori": "0.33.4",
+    "stripe": "22.6.1"
+  },
+  "devDependencies": {
+    "@better-auth/cli": "1.4.21",
+    "@cloudflare/workers-types": "5.20260903.1",
+    "@electric-sql/pglite": "0.5.8",
+    "@types/bun": "1.4.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "drizzle-kit": "0.31.10",
+    "typescript": "7.0.2",
+    "wrangler": "4.128.0"
+  }
+}

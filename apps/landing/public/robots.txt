@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /i/
+Disallow: /buy/
+
+Sitemap: https://hi.new/sitemap.xml

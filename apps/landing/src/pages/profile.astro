@@ -1,0 +1,11 @@
+---
+// The public profile shell (React island). The worker serves this for any
+// active /:name; the island fetches the public profile and renders the
+// shared card. Legacy server rendering remains the no-assets fallback.
+import ProfileView from "../components/ProfileView.tsx";
+import ProductShell from "../layouts/ProductShell.astro";
+---
+
+<ProductShell title="hi.new">
+  <ProfileView client:load />
+</ProductShell>
