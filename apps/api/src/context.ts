@@ -24,6 +24,9 @@ export type Bindings = {
   // Encrypts notification endpoints at rest.
   NOTIFICATION_ENCRYPTION_KEY?: string;
   ASSETS?: Fetcher;
+  SIGNUP_LIMIT?: RateLimit;
+  EMAIL_LIMIT?: RateLimit;
+  LOOKUP_LIMIT?: RateLimit;
 };
 
 export type Variables = {
