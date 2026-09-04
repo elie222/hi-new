@@ -1,6 +1,28 @@
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, expectNoHorizontalOverflow, latestMailTo, linkIn, unique } from "./helpers";
 
+test("a free-name limit is not reported as a taken name", async ({ page }) => {
+  const name = unique("available-name");
+  await page.route("**/api/handles", async (route) => {
+    await route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "email_name_limit", limit: 25 }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByPlaceholder("yourname").fill(name);
+  await page.getByRole("button", { name: "Claim", exact: true }).click();
+  await expect(page.getByText("This email already has 25 free names.")).toBeVisible();
+  await expect(page.getByText(/is taken/)).toHaveCount(0);
+
+  await page.goto(`/${name}`);
+  await page.getByRole("button", { name: "Claim it free" }).click();
+  await expect(page.getByText("This email already has 25 free names.")).toBeVisible();
+  await expect(page.getByText("Someone just took it.")).toHaveCount(0);
+});
+
 test("claim a name on the landing, hand a setup code to a bot, verify the email", async ({ page, request }, testInfo) => {
   const name = unique("e2e-claim");
   const email = `${name}@example.com`;
