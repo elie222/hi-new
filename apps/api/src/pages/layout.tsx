@@ -125,7 +125,15 @@ pre { padding: 14px 16px; margin-top: 16px; overflow-x: auto; line-height: 1.6; 
   font-size: 12px; line-height: 20px; text-align: center; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
-.connection-picker { padding-right: 28px; cursor: pointer; text-align: left; }
+.connection-picker {
+  /* The native caret hugs the element edge and collides with the pill radius,
+     so draw our own and inset it. */
+  appearance: none; -webkit-appearance: none;
+  padding-right: 32px; cursor: pointer; text-align: left;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1.25 5 5l4-3.75' stroke='%23848484' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 13px center; background-size: 10px 6px;
+}
+.connection-picker::-ms-expand { display: none; }
 .connection-new { color: var(--iz-muted); font-family: var(--font-body); font-weight: 500; }
 .connection-wire { position: relative; height: 1px; margin-top: 20px; }
 .connection-dashed { width: 100%; height: 1px; background: repeating-linear-gradient(to right, #D9DDE5 0 6px, transparent 6px 12px); }
@@ -189,7 +197,7 @@ pre { padding: 14px 16px; margin-top: 16px; overflow-x: auto; line-height: 1.6; 
   .connection-bot img { width: 82px; height: 82px; margin: 8px auto 10px; }
   .connection-placeholder { width: 82px; height: 100px; }
   .connection-handle, .connection-picker { width: 100%; height: 32px; padding: 5px 8px; font-size: 10.5px; }
-  .connection-picker { padding-right: 24px; }
+  .connection-picker { padding-right: 26px; background-position: right 10px center; }
   .connection-wire { margin: 16px 6px 0; }
   .connection-plus { width: 24px; height: 24px; font-size: 17px; }
   .invite-content { padding: 26px 0 0; }
