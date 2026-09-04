@@ -120,7 +120,7 @@ export function Footer(props: {
       <div className="footer-links">
         {links.map((l) => <a key={l.href} href={l.href}>{l.label}</a>)}
       </div>
-      <div className="tagline">© 2026 Inbox Zero Inc.</div>
+      <a className="tagline" href="https://www.getinboxzero.com">© 2026 Inbox Zero Inc.</a>
     </footer>
   );
 }
