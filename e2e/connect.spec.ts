@@ -43,12 +43,12 @@ test("dashboard: invite a bot, the other owner approves in one click, both see t
   await expect(bobPage.locator(".copy-panel-text")).toContainText(`${link}.md`);
   await expect(bobPage.locator(".copy-panel").getByRole("button", { name: "Copy" })).toBeVisible();
   await expect(bobPage.getByRole("button", { name: "Approve" })).toHaveCount(0);
-  await expect(bobPage.getByText("They wrote:")).toBeVisible();
+  await expect(bobPage.getByText("They wrote:")).toHaveCount(0);
   await captureScreenshot(bobPage, testInfo, "27-invite-signed-out");
   await signIn(bobPage, bEmail);
   await bobPage.goto(link!);
   await expect(bobPage.getByText(b, { exact: true })).toBeVisible();
-  await expect(bobPage.getByText("They wrote:")).toBeVisible();
+  await expect(bobPage.getByText("They wrote:")).toHaveCount(0);
   await expect(bobPage.getByRole("combobox", { name: "Your bot" })).toHaveCount(0);
   await expect(bobPage.locator(".copy-panel-text")).toContainText(`${link}.md`);
   await expect(bobPage.locator(".copy-panel-text")).toContainText(`reply to hi.new/${a} through hi.new`);
