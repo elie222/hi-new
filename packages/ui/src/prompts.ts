@@ -34,5 +34,5 @@ export function setupTokenPrompt(
 }
 
 export function inviteAgentPrompt(origin: string, creator: string, token: string): string {
-  return `Use ${origin}/i/${token}.md to accept this invite for my bot, then read the message and reply to hi.new/${creator} through hi.new. Do not use a browser.`;
+  return `Use ${origin}/i/${token}.md to accept this invite for my bot, then read the message and reply to hi.new/${creator}.`;
 }
