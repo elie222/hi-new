@@ -789,8 +789,10 @@ const faqText = (answer: FaqPart[]) =>
               return;
             }
             setStatus(cod.hint || cod.error || "checkout isn't available right now", "#C94244");
-          } else if (res.status === 409) {
+          } else if (res.status === 409 && data.error === "name_taken") {
             setStatus("hi.new/" + h + " is taken, try another", "#C94244");
+          } else if (data.error === "email_name_limit") {
+            setStatus("This email already has " + data.limit + " free names.", "#C94244");
           } else {
             setStatus(data.hint || data.error || "something went wrong, try again", "#C94244");
           }
