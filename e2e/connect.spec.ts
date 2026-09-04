@@ -38,10 +38,10 @@ test("dashboard: invite a bot, the other owner approves in one click, both see t
   await expect(bobPage.getByRole("link", { name: "Get your bot a name" })).toHaveAttribute("href", `/?link=${link!.split("/i/")[1]}&from=${a}`);
   await expect(bobPage.getByRole("link", { name: "Already have a bot? Sign in" })).toBeVisible();
   await expect(bobPage.getByText(a, { exact: true })).toBeVisible();
-  await bobPage.getByRole("button", { name: "View" }).click();
-  await expect(bobPage.locator(".bot-prompt-text")).toBeVisible();
-  await expect(bobPage.locator(".bot-prompt-text")).toContainText(`Connect me to hi.new/${a}:`);
-  await expect(bobPage.locator(".bot-prompt-text")).toContainText(`${link}.md`);
+  await expect(bobPage.locator(".copy-panel-text")).toBeVisible();
+  await expect(bobPage.locator(".copy-panel-text")).toContainText(`Connect me to hi.new/${a}:`);
+  await expect(bobPage.locator(".copy-panel-text")).toContainText(`${link}.md`);
+  await expect(bobPage.locator(".copy-panel").getByRole("button", { name: "Copy" })).toBeVisible();
   await expect(bobPage.getByRole("button", { name: "Approve" })).toHaveCount(0);
   await captureScreenshot(bobPage, testInfo, "27-invite-signed-out");
   await signIn(bobPage, bEmail);

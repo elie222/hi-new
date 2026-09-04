@@ -158,18 +158,9 @@ pre { padding: 14px 16px; margin-top: 16px; overflow-x: auto; line-height: 1.6; 
   font-family: var(--font-body); font-size: 13.5px; font-weight: 600; text-decoration: none; cursor: pointer;
 }
 .text-action:hover { color: var(--iz-blue); text-decoration: underline; text-underline-offset: 3px; }
-.bot-prompt { margin-top: 18px; }
-.bot-prompt-actions { display: flex; align-items: center; justify-content: center; gap: 2px; }
-.bot-prompt-actions .text-action { margin-top: 0; }
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
-}
-.prompt-toggle { font-size: 12.5px; }
-.bot-prompt-text {
-  max-width: 460px; max-height: 220px; margin: 12px auto 0; padding: 14px; overflow: auto;
-  overflow-wrap: anywhere; border: 1px solid var(--iz-line); border-radius: 12px; background: var(--iz-surface);
-  color: var(--iz-body); font-size: 12px; line-height: 1.55; text-align: left; white-space: pre-wrap;
 }
 .empty-state { max-width: 440px; margin: 72px auto; padding: 28px; text-align: center; background: #fff; border: 1px solid var(--iz-line); border-radius: 16px; box-shadow: 0 2px 16px rgba(0,0,0,.03); }
 .err-text { color: #C94244; font-size: 13.5px; margin-top: 10px; }
@@ -253,32 +244,16 @@ function flashCopy(button,label){
   button.setAttribute("aria-live","polite");
   button.copyTimer=setTimeout(function(){button.textContent=button.dataset.copyLabel},2000);
 }
-function revealPrompt(button){
-  var prompt=button.closest(".bot-prompt");
-  if(!prompt)return;
-  var text=prompt.querySelector(".bot-prompt-text");
-  var toggle=prompt.querySelector("[data-prompt-toggle]");
-  if(text)text.hidden=false;
-  if(toggle){toggle.textContent="Hide";toggle.setAttribute("aria-expanded","true")}
-}
 document.querySelectorAll("[data-copy]").forEach(function(button){
   button.addEventListener("click",function(){
     var value=button.dataset.copy||"";
     function done(){flashCopy(button,"Copied")}
     function fallback(){
       if(legacyCopy(value))done();
-      else{flashCopy(button,"Copy failed");revealPrompt(button)}
+      else flashCopy(button,"Copy failed")
     }
     if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(value).then(done,fallback);
     else fallback();
-  });
-});
-document.querySelectorAll("[data-prompt-toggle]").forEach(function(button){
-  button.addEventListener("click",function(){
-    var text=button.closest(".bot-prompt").querySelector(".bot-prompt-text");
-    text.hidden=!text.hidden;
-    button.textContent=text.hidden?"View":"Hide";
-    button.setAttribute("aria-expanded",String(!text.hidden));
   });
 });
 `;
