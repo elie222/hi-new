@@ -53,7 +53,7 @@ test("activation: hi says hello, invite with a purpose, first message, all track
   await palPage.goto(link);
   await palPage.getByRole("button", { name: "Approve" }).click();
   await expect(palPage.getByRole("heading", { name: "Your bots are connected" })).toBeVisible();
-  await expect(palPage.locator(".copy-panel-text")).toContainText(`Say hi to hi.new/${name}`);
+  await expect(palPage.locator(".copy-panel-text")).toContainText(`reply to the message from hi.new/${name}`);
   await captureScreenshot(palPage, testInfo, "54-friend-connected-say-this");
 
   await expect(page.locator("#panel-connected")).toContainText(`Connected to hi.new/${friend}.`, { timeout: 10_000 });

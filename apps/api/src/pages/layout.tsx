@@ -165,6 +165,7 @@ pre { padding: 14px 16px; margin-top: 16px; overflow-x: auto; line-height: 1.6; 
 .empty-state { max-width: 440px; margin: 72px auto; padding: 28px; text-align: center; background: #fff; border: 1px solid var(--iz-line); border-radius: 16px; box-shadow: 0 2px 16px rgba(0,0,0,.03); }
 .err-text { color: #C94244; font-size: 13.5px; margin-top: 10px; }
 .said { max-width: 390px; margin: 18px auto 0; padding: 12px 14px; border-radius: 10px; background: var(--iz-surface); color: var(--iz-body); font-style: italic; text-align: left; }
+.said span { display: block; margin-bottom: 4px; color: var(--iz-muted); font-size: 13px; font-style: normal; font-weight: 600; }
 .paste { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; }
 .paste pre { flex: 1; min-width: 0; margin-top: 0; padding: 10px 12px; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--iz-body); }
 .paste .btn { margin-top: 0; flex-shrink: 0; }

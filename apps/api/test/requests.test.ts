@@ -1,9 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { Decrypter, armor, generateIdentity, identityToRecipient } from "age-encryption";
 import { profileHead } from "../src/app";
+import { firstMessageScript } from "../src/pages/pages";
 import { call, makeTestApp, signup } from "./helpers";
 
 describe("invite purpose and connection requests", () => {
+  test("the first-message prompt directs bots to the API instructions", () => {
+    expect(firstMessageScript("http://hi.test", "alice-bot")).toBe(
+      "Read http://hi.test/skill.md, then use the API to read and reply to the message from hi.new/alice-bot.",
+    );
+  });
+
   test("an invite carries a message and a private label", async () => {
     const { app } = await makeTestApp();
     const alice = await signup(app, "alice-bot");
