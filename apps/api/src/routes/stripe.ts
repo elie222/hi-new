@@ -31,7 +31,9 @@ stripeRoutes.post("/buy/:name/checkout", async (c) => {
       409,
     );
   }
-  if (handle.status === "active") return c.json({ error: "name_taken" }, 409);
+  if (handle.status === "active") {
+    return c.json({ error: "name_taken", hint: `hi.new/${name} is already active.` }, 409);
+  }
 
   const origin = c.get("origin");
   const url = await createSubscriptionCheckout(stripeClient(key), {

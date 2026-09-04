@@ -17,7 +17,7 @@ import {
   XIcon,
   type BotColor,
 } from "@hi-new/ui";
-import { readClaim } from "../lib/claim";
+import { markClaimActive, readClaim } from "../lib/claim";
 import LiveHome from "./LiveHome";
 
 type Session = {
@@ -116,7 +116,7 @@ const desktop = typeof navigator !== "undefined" && !/Android|iPhone|iPad|iPod/i
 
 export default function SetupFlow() {
   const [session, setSession] = useState<Session | null>(null);
-  const [mode, setMode] = useState<"flow" | "unpaid" | "activating" | "botPaid">("flow");
+  const [mode, setMode] = useState<"flow" | "checking" | "unpaid" | "activating" | "botPaid">("flow");
   const [payErr, setPayErr] = useState("");
   const [paying, setPaying] = useState(false);
   const [screen, setScreen] = useState<"boot" | "ceremony" | "paste" | "email" | "live">("boot");
@@ -186,13 +186,6 @@ export default function SetupFlow() {
     };
     setSession(s);
 
-    // Reserved but unpaid (e.g. backed out of checkout): pay, or go free.
-    if (claim?.paid && !paidReturn) {
-      history.replaceState(null, "", "/" + name + "/setup");
-      setMode("unpaid");
-      return;
-    }
-
     const start = () => {
       // The ceremony plays once per name — tracked explicitly, so a reload
       // resumes at the paste step but a fresh claim always gets its moment.
@@ -232,6 +225,27 @@ export default function SetupFlow() {
       })();
     };
 
+    // The saved claim can outlive the payment redirect. OAuth also returns
+    // without ?paid=1, so ask the authenticated endpoint before showing the
+    // reservation as unpaid again.
+    if (claim?.paid && !paidReturn) {
+      setMode("checking");
+      void (async () => {
+        try {
+          const res = await fetch("/api/handles/me", { headers: auth(token!), cache: "no-store" });
+          if (res.ok) {
+            markClaimActive(name);
+            setMode("flow");
+            start();
+            return;
+          }
+        } catch { /* fall through to the saved reservation */ }
+        history.replaceState(null, "", "/" + name + "/setup");
+        setMode("unpaid");
+      })();
+      return;
+    }
+
     if (!paidReturn) return void start();
 
     // Back from Stripe: the webhook may not have landed yet, so poll the
@@ -245,6 +259,7 @@ export default function SetupFlow() {
         if (res.status === 200) {
           const profile = await res.json();
           if (!token) return void setMode("botPaid");
+          markClaimActive(name);
           if (isBotColor(claim?.color) && claim!.color !== profile.color) {
             fetch("/api/handles/me", {
               method: "PATCH",
@@ -305,7 +320,17 @@ export default function SetupFlow() {
       });
       const data = await res.json();
       if (res.ok && data.url) return void (location.href = data.url);
-      setPayErr(data.hint || data.error || "Checkout isn't available right now.");
+      if (data.error === "name_taken") {
+        const me = await fetch("/api/handles/me", { headers: auth(token), cache: "no-store" }).catch(() => null);
+        if (me?.ok) {
+          markClaimActive(name);
+          location.reload();
+          return;
+        }
+        setPayErr(`hi.new/${name} is already active.`);
+      } else {
+        setPayErr(data.hint || "Checkout isn't available right now.");
+      }
     } catch {
       setPayErr("Network error. Try again.");
     }
@@ -357,6 +382,7 @@ export default function SetupFlow() {
       {mode === "unpaid" && (
         <Headline title="Almost yours." sub={<>hi.new/{name} is reserved for 24 hours. Pay to activate it, or pick a longer name for free.</>} />
       )}
+      {mode === "checking" && <Headline title="Checking your name." sub={<>Confirming hi.new/{name}&hellip;</>} />}
       {mode === "activating" && <Headline title="Payment received." sub={<>Activating hi.new/{name}&hellip;</>} />}
       {mode === "botPaid" && (
         <Headline title={<>It&rsquo;s yours.</>} sub="The token your bot got when it claimed the name is now active. Nothing else to do." />
