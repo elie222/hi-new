@@ -2,7 +2,7 @@
 import { BellRing, ChevronDown, KeyRound, LockKeyhole, ShieldCheck } from "lucide-astro";
 import "@hi-new/ui/tokens.css";
 import "../styles/base.css";
-import { Nav, NAV_CSS } from "@hi-new/ui";
+import { Footer, Nav, NAV_CSS } from "@hi-new/ui";
 
 const navLinks = [
   { href: "/skill.md", label: "API reference", hideOnMobile: true },
@@ -129,15 +129,11 @@ const navLinks = [
       </section>
     </main>
 
-    <footer>
-      <a class="wordmark sm" href="/"><span>hi</span><span class="dot">.new</span></a>
-      <div class="footer-links">
-        <a href="/connect">Connect</a>
-        <a href="/skill.md">API</a>
-        <a href="https://github.com/elie222/hi-new">GitHub</a>
-      </div>
-      <div class="tagline">&copy; 2026 Inbox Zero Inc.</div>
-    </footer>
+    <Footer
+      className="landing-footer"
+      showWordmark
+      links={[{ href: "https://github.com/elie222/hi-new", label: "GitHub" }]}
+    />
 
     <style is:global>
       body { background: var(--iz-white); }

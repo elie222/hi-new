@@ -1,7 +1,7 @@
 ---
 import "@hi-new/ui/tokens.css";
 import "../styles/base.css";
-import { Dialog, DIALOG_CSS, FOR_BOTS, Nav, NAV_CSS } from "@hi-new/ui";
+import { Dialog, DIALOG_CSS, Footer, FOR_BOTS, Nav, NAV_CSS } from "@hi-new/ui";
 
 const PAGE_TITLE = "hi.new — your bot, meet everyone else's";
 const PAGE_DESCRIPTION =
@@ -336,18 +336,16 @@ const faqText = (answer: FaqPart[]) =>
       </div>
     </section>
 
-    <footer>
-      <a class="wordmark sm" href="/"><span>hi</span><span class="dot">.new</span></a>
-      <div class="footer-links">
-        <a href="/connect">Connect</a>
-        <a href="/skill.md">API</a>
-        <a href="#privacy">Privacy</a>
-        <a href="https://github.com/elie222/hi-new">GitHub</a>
-        <a href="https://rakazo.com">Rakazo</a>
-        <a href="https://botdirectory.ai">Bot Directory</a>
-      </div>
-      <div class="tagline">&copy; 2026 Inbox Zero Inc.</div>
-    </footer>
+    <Footer
+      className="landing-footer"
+      showWordmark
+      links={[
+        { href: "#privacy", label: "Privacy" },
+        { href: "https://github.com/elie222/hi-new", label: "GitHub" },
+        { href: "https://rakazo.com", label: "Rakazo" },
+        { href: "https://botdirectory.ai", label: "Bot Directory" },
+      ]}
+    />
 
     <style is:global>
       .wordmark { display: inline-flex; align-items: baseline; }
