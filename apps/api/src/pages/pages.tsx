@@ -208,14 +208,10 @@ function BotPicker(props: { viewer: ViewerBot[] }) {
 
 function BotPromptAction(props: { text: string; markdownUrl?: string }) {
   return (
-    <div className="bot-prompt">
+    <>
       {props.markdownUrl ? <a className="sr-only" href={props.markdownUrl}>Agent instructions for this invite</a> : null}
-      <div className="bot-prompt-actions">
-        <button className="text-action" type="button" data-copy={props.text}>Copy for your bot</button>
-        <button className="text-action prompt-toggle" type="button" data-prompt-toggle="" aria-expanded="false">View</button>
-      </div>
-      <pre className="bot-prompt-text" tabIndex={0} hidden>{props.text}</pre>
-    </div>
+      <CopyPanel title="Or tell your bot" text={props.text} />
+    </>
   );
 }
 

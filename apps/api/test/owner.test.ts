@@ -88,8 +88,8 @@ describe("owner dashboard", () => {
     expect(anonLink).toContain(`href="/owner?next=${encodeURIComponent(`/i/${token}`)}"`);
     expect(anonLink).toContain("Already have a bot? Sign in");
     expect(anonLink).not.toContain("Sign in to continue");
-    expect(anonLink).toContain("Copy for your bot");
-    expect(anonLink).toContain("data-prompt-toggle");
+    expect(anonLink).toContain("Or tell your bot");
+    expect(anonLink).toContain("copy-panel-text");
     expect(anonLink).toContain("Connect me to hi.new/bob-bot:");
     expect(anonLink).toContain(`http://hi.test/i/${token}.md`);
     expect(anonLink).toContain("bob-bot");
