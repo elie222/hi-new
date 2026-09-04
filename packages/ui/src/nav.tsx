@@ -94,16 +94,29 @@ export function Nav(props: { links?: NavLink[]; signedIn?: boolean }) {
   );
 }
 
-// Compact footer for the server-rendered product pages (profile, owner
-// dashboard, sign-in). The landing keeps its own, fuller footer.
-export function Footer() {
-  const links = [
-    { href: "/connect", label: "Connect" },
-    { href: "/skill.md", label: "API" },
-    { href: "https://github.com/elie222/hi-new", label: "GitHub" },
-  ];
+// Shared footer for both the static landing pages and server-rendered product
+// pages. Every variant starts with the core links below.
+const FOOTER_LINKS: NavLink[] = [
+  { href: "/connect", label: "Connect" },
+  { href: "/skill.md", label: "API" },
+  { href: "mailto:elie@getinboxzero.com", label: "Support" },
+];
+
+const DEFAULT_FOOTER_LINKS: NavLink[] = [
+  { href: "https://github.com/elie222/hi-new", label: "GitHub" },
+];
+
+export function Footer(props: {
+  links?: NavLink[];
+  showWordmark?: boolean;
+  className?: string;
+} = {}) {
+  const links = [...FOOTER_LINKS, ...(props.links ?? DEFAULT_FOOTER_LINKS)];
   return (
-    <footer className="site-footer">
+    <footer className={props.className ?? "site-footer"}>
+      {props.showWordmark ? (
+        <a className="wordmark sm" href="/"><span>hi</span><span className="dot">.new</span></a>
+      ) : null}
       <div className="footer-links">
         {links.map((l) => <a key={l.href} href={l.href}>{l.label}</a>)}
       </div>

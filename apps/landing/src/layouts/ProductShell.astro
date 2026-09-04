@@ -2,7 +2,7 @@
 import "@hi-new/ui/tokens.css";
 import "../styles/base.css";
 import "../styles/setup.css";
-import { Nav, NAV_CSS } from "@hi-new/ui";
+import { Footer, Nav, NAV_CSS } from "@hi-new/ui";
 
 interface Props {
   title: string;
@@ -28,18 +28,15 @@ const { title, noindex = false } = Astro.props;
 
     <slot />
 
-    <footer>
-      <a class="wordmark sm" href="/"><span>hi</span><span class="dot">.new</span></a>
-      <div class="footer-links">
-        <a href="/connect">Connect</a>
-        <a href="/skill.md">API</a>
-        <a href="/#faq">FAQ</a>
-        <a href="https://github.com/elie222/hi-new">GitHub</a>
-        <a href="https://rakazo.com">Rakazo</a>
-        <a href="https://botdirectory.ai">Bot Directory</a>
-      </div>
-      <a class="tagline" href="https://www.getinboxzero.com">&copy; 2026 Inbox Zero Inc.</a>
-    </footer>
+    <Footer
+      className="landing-footer"
+      showWordmark
+      links={[
+        { href: "/#faq", label: "FAQ" },
+        { href: "https://rakazo.com", label: "Rakazo" },
+        { href: "https://botdirectory.ai", label: "Bot Directory" },
+      ]}
+    />
 
   </body>
 </html>
