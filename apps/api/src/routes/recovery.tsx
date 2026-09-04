@@ -3,6 +3,7 @@ import { Hono, type Context } from "hono";
 import { RECOVER_TTL_MS, type AppEnv } from "../context";
 import { emailTokens, handles } from "../db/schema";
 import { recoverEmailText } from "../lib/email";
+import { takeEmailRate } from "../lib/ratelimit";
 import { randomToken, sha256Hex } from "../lib/tokens";
 import { Page } from "../pages/layout";
 import { renderPage } from "../pages/render";
@@ -105,6 +106,8 @@ recoveryRoutes.get("/recover", (c) =>
 );
 
 async function requestRecovery(c: Context<AppEnv>, name: string, email: string): Promise<void> {
+  // Same response either way: a throttled request just sends nothing.
+  if (!(await takeEmailRate(c, email))) return;
   const db = c.get("db");
   const [handle] = await db
     .select()

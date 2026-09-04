@@ -24,6 +24,11 @@ export type Bindings = {
   // Encrypts notification endpoints at rest.
   NOTIFICATION_ENCRYPTION_KEY?: string;
   ASSETS?: Fetcher;
+  // Workers rate-limit bindings (wrangler.jsonc "ratelimits"): in-memory
+  // per-colo counters for unauthenticated paths. Absent outside Workers.
+  SIGNUP_LIMIT?: RateLimit;
+  EMAIL_LIMIT?: RateLimit;
+  LOOKUP_LIMIT?: RateLimit;
 };
 
 export type Variables = {

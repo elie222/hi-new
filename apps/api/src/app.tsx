@@ -24,7 +24,7 @@ import { groupRoutes } from "./routes/groups";
 import { ogRoutes, warmOgCard } from "./routes/og";
 import { recoveryRoutes } from "./routes/recovery";
 import { groupLinkFromQuery, inviteFromQuery, ownerRoutes, viewerHandles } from "./routes/owner";
-import { createOwnerAuth, OWNER_SESSION_COOKIES } from "./lib/owner-auth";
+import { createOwnerAuth, OWNER_SESSION_COOKIES, type OwnerAuth } from "./lib/owner-auth";
 import { stripeRoutes } from "./routes/stripe";
 import { apiMd, cliPrefix, skillMd } from "./skill";
 import { createMcpRoutes } from "./mcp";
@@ -75,6 +75,22 @@ Then read ${origin}/skill.md for what to tell your human. Without node, redeem b
 with your token (POST ${origin}/api/invites/${token}/redeem, \`Authorization: Bearer hn_...\`);
 ${origin}/api.md has the rest.
 `;
+}
+
+// Better Auth builds its plugin graph on construction, and most requests
+// (bot API calls) never touch owner auth, so it is built on first use. Only
+// `api` and `handler` are consumed.
+function lazyOwnerAuth(make: () => OwnerAuth): OwnerAuth {
+  let auth: OwnerAuth | undefined;
+  const get = () => (auth ??= make());
+  return {
+    get api() {
+      return get().api;
+    },
+    get handler() {
+      return get().handler;
+    },
+  } as OwnerAuth;
 }
 
 // The profile shell is a static page; the share metadata (title, card image)
@@ -136,7 +152,9 @@ export function createApp(overrides?: {
     c.set("ownerSignedIn", OWNER_SESSION_COOKIES.some((name) => Boolean(getCookie(c, name))));
     c.set(
       "ownerAuth",
-      createOwnerAuth({ db: c.get("db"), origin: c.get("origin"), env: c.env ?? {}, sendEmail: c.get("sendEmail") }),
+      lazyOwnerAuth(() =>
+        createOwnerAuth({ db: c.get("db"), origin: c.get("origin"), env: c.env ?? {}, sendEmail: c.get("sendEmail") }),
+      ),
     );
     c.set("waitUntil", overrides?.waitUntil ?? ((p) => {
       try {
@@ -146,6 +164,12 @@ export function createApp(overrides?: {
       }
     }));
     await next();
+    // No page here is meant to be framed. Keeps the dashboard's one-click
+    // forms (ack, toggles) out of reach of clickjacking.
+    if (c.res.headers.get("content-type")?.includes("text/html")) {
+      c.res.headers.set("content-security-policy", "frame-ancestors 'none'");
+      c.res.headers.set("x-frame-options", "DENY");
+    }
   });
 
   app.get("/skill.md", (c) =>

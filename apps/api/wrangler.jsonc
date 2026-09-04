@@ -24,6 +24,13 @@
     { "pattern": "hi.new", "custom_domain": true, "zone_name": "hi.new" },
     { "pattern": "www.hi.new", "custom_domain": true, "zone_name": "hi.new" }
   ],
+  // In-memory per-colo throttles for paths that carry no credential (see
+  // lib/ratelimit.ts). Keys: caller IP, plus the target mailbox for email.
+  "ratelimits": [
+    { "name": "SIGNUP_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "EMAIL_LIMIT", "namespace_id": "1002", "simple": { "limit": 5, "period": 60 } },
+    { "name": "LOOKUP_LIMIT", "namespace_id": "1003", "simple": { "limit": 60, "period": 60 } }
+  ],
   "vars": {
     "APP_ORIGIN": "https://hi.new"
   },
@@ -39,6 +46,12 @@
       "placement": { "mode": "off" },
       "workers_dev": false,
       "routes": [{ "pattern": "staging.hi.new", "custom_domain": true, "zone_name": "hi.new" }],
+      // Bindings are not inherited by environments.
+      "ratelimits": [
+        { "name": "SIGNUP_LIMIT", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },
+        { "name": "EMAIL_LIMIT", "namespace_id": "2002", "simple": { "limit": 5, "period": 60 } },
+        { "name": "LOOKUP_LIMIT", "namespace_id": "2003", "simple": { "limit": 60, "period": 60 } }
+      ],
       "vars": {
         "APP_ORIGIN": "https://staging.hi.new",
         "STAGE": "staging"

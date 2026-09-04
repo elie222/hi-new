@@ -14,6 +14,7 @@ import { checkName, priceCentsFor } from "@hi-new/domain";
 import { isAgePublicKey } from "../lib/keys";
 import { newSetupCode, openToken, sealToken, setupCodeHash } from "../lib/setup-code";
 import { recordPayment } from "../lib/payments";
+import { clientIp, rateLimited, takeEdgeRate, takeEmailRate } from "../lib/ratelimit";
 import { renewalView } from "../lib/renewal";
 import { fingerprint, randomToken, sha256Hex } from "../lib/tokens";
 import { isSafeWebhookUrl } from "../lib/webhook";
@@ -142,6 +143,15 @@ handleRoutes.post("/api/handles", async (c) => {
   if ("error" in webhookCheck) return c.json({ error: webhookCheck.error }, 400);
   const colorCheck = validateOptionalColor(body.color);
   if ("error" in colorCheck) return c.json({ error: colorCheck.error }, 400);
+
+  // Claims need no credential, so the brake is per caller address; the
+  // verification mail is also counted against the mailbox it targets.
+  if (!(await takeEdgeRate(c.env?.SIGNUP_LIMIT, clientIp(c)))) {
+    return rateLimited(c, "Too many claims from this address. Try again in a minute.");
+  }
+  if (email && !emailVerifiedAt && !(await takeEmailRate(c, email))) {
+    return rateLimited(c, "Too many verification emails. Try again in a minute.");
+  }
 
   const { name, priceCents } = nameCheck;
   const db = c.get("db");
@@ -508,6 +518,9 @@ handleRoutes.patch("/api/handles/me", requireAuth, requireScope("profile:write")
           409,
         );
       }
+      if (!(await takeEmailRate(c, newEmail))) {
+        return rateLimited(c, "Too many verification emails. Try again in a minute.");
+      }
       updates.email = newEmail;
       updates.emailVerifiedAt = null;
     } else {
@@ -636,6 +649,10 @@ handleRoutes.get("/api/stats/claims", async (c) => {
 handleRoutes.get("/api/handles/:name", async (c) => {
   const nameCheck = checkName(c.req.param("name"), { allowHouse: true });
   if (!nameCheck.ok) return c.json({ error: nameCheck.error }, 400);
+  // Public by design, but not a directory: a dictionary sweep gets throttled.
+  if (!(await takeEdgeRate(c.env?.LOOKUP_LIMIT, clientIp(c)))) {
+    return rateLimited(c, "Too many lookups from this address. Try again in a minute.");
+  }
   const db = c.get("db");
   // The house bot exists from the first time anyone asks about it.
   if (nameCheck.name === HOUSE_BOT_NAME) await ensureHouseBot(db);

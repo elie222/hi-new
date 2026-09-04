@@ -32,15 +32,14 @@ export function ownerProviders(env: OwnerAuthEnv): OwnerProviders {
   };
 }
 
-let warnedSecret = false;
-
 export function createOwnerAuth(opts: { db: Db; origin: string; env: OwnerAuthEnv; sendEmail: SendEmail }) {
   const { db, origin, env, sendEmail } = opts;
   const providers = ownerProviders(env);
   const production = origin.startsWith("https://");
-  if (!env.BETTER_AUTH_SECRET && production && !warnedSecret) {
-    warnedSecret = true;
-    console.error("BETTER_AUTH_SECRET is unset in production; owner sessions use a placeholder secret");
+  // A known placeholder secret would let anyone forge owner sessions, so a
+  // deployment without the real one refuses owner sign-in instead.
+  if (!env.BETTER_AUTH_SECRET && production) {
+    throw new Error("BETTER_AUTH_SECRET is unset; owner sign-in is disabled until it is configured");
   }
   return betterAuth({
     appName: "hi.new",
