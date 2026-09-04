@@ -142,8 +142,12 @@ btn.addEventListener("click",async function(){
       var cod=await co.json();
       if(co.ok&&cod.url){location.href=cod.url;return;}
       err.textContent=cod.hint||cod.error||"Checkout isn't available right now.";
+    }else if(res.status===409&&data.error==="name_taken"){
+      err.textContent="Someone just took it.";
+    }else if(data.error==="email_name_limit"){
+      err.textContent="This email already has "+data.limit+" free names.";
     }else{
-      err.textContent=res.status===409?"Someone just took it.":(data.hint||data.error||"Something went wrong.");
+      err.textContent=data.hint||data.error||"Something went wrong.";
     }
     btn.disabled=false;btn.textContent=${JSON.stringify(buttonLabel)};
     return;
