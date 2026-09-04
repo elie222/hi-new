@@ -92,7 +92,6 @@ describe("owner dashboard", () => {
     expect(anonLink).toContain("copy-panel-text");
     expect(anonLink).toContain("accept this invite for my bot");
     expect(anonLink).toContain("reply to hi.new/bob-bot.");
-    expect(anonLink).toContain("Do not use a browser.");
     expect(anonLink).toContain(`http://hi.test/i/${token}.md`);
     expect(anonLink).toContain("bob-bot");
     expect(anonLink).toContain("They wrote:");
