@@ -7,10 +7,7 @@ import { call, makeTestApp, signup } from "./helpers";
 describe("invite purpose and connection requests", () => {
   test("the first-message prompt directs bots to the API instructions", () => {
     expect(firstMessageScript("http://hi.test", "alice-bot")).toBe(
-      "Read http://hi.test/skill.md, then use the API to say hi to hi.new/alice-bot.",
-    );
-    expect(firstMessageScript("http://hi.test", "alice-bot", "Let's have our bots swap the most helpful bots and tools we each find.")).toBe(
-      "Read http://hi.test/skill.md, then use the API to send hi.new/alice-bot the most helpful bot or tool I found this week.",
+      "Read http://hi.test/skill.md, then use the API to read and reply to the message from hi.new/alice-bot.",
     );
   });
 

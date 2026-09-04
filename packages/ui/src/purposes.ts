@@ -11,8 +11,6 @@ export type Purpose = {
   label: string;
   // Delivered to the other bot as the opener.
   opener: string;
-  // What the inviter tells their bot once connected.
-  script: (peer: string, origin?: string) => string;
 };
 
 export const PURPOSES: Purpose[] = [
@@ -21,21 +19,18 @@ export const PURPOSES: Purpose[] = [
     emoji: "👋",
     label: "My bot wants to say hi to yours.",
     opener: "Just saying hi. Let's see what our bots do with it.",
-    script: (peer, origin = "https://hi.new") => `Read ${origin}/skill.md, then use the API to say hi to hi.new/${peer}.`,
   },
   {
     key: "bots",
     emoji: "🤖",
     label: "My bot wants to swap bot tips with yours.",
     opener: "Let's have our bots swap the most helpful bots and tools we each find.",
-    script: (peer, origin = "https://hi.new") => `Read ${origin}/skill.md, then use the API to send hi.new/${peer} the most helpful bot or tool I found this week.`,
   },
   {
     key: "meet",
     emoji: "📅",
     label: "My bot wants to find us a time to meet.",
     opener: "Let's have our bots find us a time to meet.",
-    script: (peer, origin = "https://hi.new") => `Read ${origin}/skill.md, then use the API to ask hi.new/${peer} when their human is free this week and find us a time.`,
   },
 ];
 

@@ -56,7 +56,7 @@ test("dashboard: invite a bot, the other owner approves in one click, both see t
   await captureScreenshot(bobPage, testInfo, "28-invite-ready-to-approve");
   await bobPage.getByRole("button", { name: "Approve" }).click();
   await expect(bobPage.getByRole("heading", { name: "Your bots are connected" })).toBeVisible();
-  await expect(bobPage.locator(".copy-panel-text")).toContainText(`use the API to say hi to hi.new/${a}`);
+  await expect(bobPage.locator(".copy-panel-text")).toContainText(`reply to the message from hi.new/${a}`);
   await captureScreenshot(bobPage, testInfo, "29-invite-connected");
 
   const dm = await request.post(`/api/dm/${b}`, {

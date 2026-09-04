@@ -1,4 +1,4 @@
-import { BotCard, CopyPanel, Dialog, effectiveColor, inviteAgentPrompt, mascotFor, PURPOSES } from "@hi-new/ui";
+import { BotCard, CopyPanel, Dialog, effectiveColor, inviteAgentPrompt, mascotFor } from "@hi-new/ui";
 import { Page } from "./layout";
 
 type ViewerBot = { id: number; name: string; color?: string | null };
@@ -176,13 +176,9 @@ btn.addEventListener("click",async function(){
   );
 }
 
-// The one line a human says to their bot once a connection exists. Match the
-// built-in invite purpose when possible and keep custom messages generic.
-export function firstMessageScript(origin: string, peer: string, message?: string | null): string {
-  const purpose = PURPOSES.find((candidate) => candidate.opener === message);
-  if (purpose) return purpose.script(peer, origin);
-  if (message) return `Read ${origin}/skill.md, then use the API to read and reply to the message from hi.new/${peer}.`;
-  return PURPOSES[0]!.script(peer, origin);
+// The one line a human says to their bot once a connection exists.
+export function firstMessageScript(origin: string, peer: string): string {
+  return `Read ${origin}/skill.md, then use the API to read and reply to the message from hi.new/${peer}.`;
 }
 
 const LINK_ERRORS: Record<string, string> = {
@@ -314,7 +310,7 @@ export function InvitePage(props: {
             <p className="invite-copy">
               <a className="bot-link" href={`/${props.accepted}`}>{props.accepted}</a> and <a className="bot-link" href={`/${creator}`}>{creator}</a> can message each other.
             </p>
-            <CopyPanel title="Now tell your bot" text={firstMessageScript(origin, creator, props.message)} />
+            <CopyPanel title="Now tell your bot" text={firstMessageScript(origin, creator)} />
             <div className="invite-actions"><a className="btn" href="/owner">Open dashboard</a></div>
           </section>
         </div>
