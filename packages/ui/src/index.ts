@@ -9,4 +9,5 @@ export { StepFooter } from "./step-footer";
 export { TILT_SCRIPT } from "./tilt";
 export { XIcon } from "./x-icon";
 export * from "./bot-colors";
+export * from "./prompts";
 export * from "./purposes";

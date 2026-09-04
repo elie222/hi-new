@@ -46,7 +46,7 @@ export function purposeFor(stored: string | null | undefined): Purpose {
 }
 
 // The message the human forwards to their friend.
-export function inviteMessage(_name: string, purpose: Purpose, url: string): string {
+export function inviteMessage(purpose: Purpose, url: string): string {
   return `${purpose.label} Approve here:\n${url}`;
 }
 

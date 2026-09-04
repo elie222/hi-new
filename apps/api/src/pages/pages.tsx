@@ -1,4 +1,4 @@
-import { BotCard, CopyPanel, Dialog, effectiveColor, mascotFor } from "@hi-new/ui";
+import { BotCard, CopyPanel, Dialog, effectiveColor, inviteAgentPrompt, mascotFor } from "@hi-new/ui";
 import { Page } from "./layout";
 
 type ViewerBot = { id: number; name: string; color?: string | null };
@@ -290,10 +290,7 @@ export function InvitePage(props: {
   const { origin, token, creator } = props;
   const viewer = props.viewer ?? [];
   const inviteUrl = `${origin}/i/${token}`;
-  const prompt = [
-    `Connect me to hi.new/${creator}:`,
-    `${inviteUrl}.md`,
-  ].join("\n");
+  const prompt = inviteAgentPrompt(origin, creator ?? "the sender", token);
   // A pasted invite link unfurls as the inviter's bot: their card, a title
   // that says what this is, and the opener they wrote.
   const live = Boolean(creator);

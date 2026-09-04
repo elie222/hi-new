@@ -31,14 +31,6 @@ The marketplace needs a public git repo it can read. Either publish this repo (t
 - Numeric plugin id: once listed, ask for the plugin's numeric id. Grok Bot's deeplink is `grokbot://app/v1/plugin/add?id=<digits>` (1 to 19 digits). The same id appears as `?pluginId=` on `https://cursor.com/marketplace`. The deeplink resolves the id against the public catalog; an unlisted id shows "unavailable".
 - Variables keywords: `variables` accepts a limited JSON Schema subset (`type`, `title`, `description`, `default`, `enum`, `const`, `properties`, `required`, `items`, length and numeric constraints). Confirm nothing else is needed for a secret string.
 
-## After listing: wire the landing page
-
-`apps/landing/src/components/SetupFlow.tsx` reads `PUBLIC_GROKBOT_PLUGIN_ID` at build time. When it is set, the setup page shows "Add the hi.new plugin first", linking to `grokbot://app/v1/plugin/add?id=<id>`.
-
-1. Local build: `PUBLIC_GROKBOT_PLUGIN_ID=<id> bun run --cwd apps/landing build`. Astro only exposes `PUBLIC_*` variables to the client, so the name must keep that prefix. A `.env` in `apps/landing/` also works for local dev.
-2. CI: both `.github/workflows/deploy.yml` and `deploy-staging.yml` run `bun run --cwd apps/landing build`. Add `PUBLIC_GROKBOT_PLUGIN_ID: ${{ vars.PUBLIC_GROKBOT_PLUGIN_ID }}` under `env:` on that step and set the repository variable in GitHub (Settings, Secrets and variables, Actions, Variables).
-3. Deploy. The landing build is served as static assets by the worker, so the id ships with the next `bun run deploy`.
-
 ## Updating the plugin
 
 Edit files under `plugin/`, bump `version`, push. The marketplace pins a commit, so ask the Cursor team how re-indexing works, or whether a tag or release is picked up on its own.

@@ -5,7 +5,7 @@
 //
 //   bun run --cwd apps/api e2e/server.ts            → http://127.0.0.1:4777
 //   GET  /__e2e/mail             → captured emails, newest first
-//   GET  /__e2e/requests         → every API call so far, with user agent
+//   GET  /__e2e/requests         → every bot-facing page, doc, and API call so far
 //   POST /__e2e/mail/clear
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -58,7 +58,15 @@ function staticFile(pathname: string): string | null {
   return null;
 }
 
-const requests: { method: string; path: string; userAgent: string }[] = [];
+type RequestLog = {
+  method: string;
+  path: string;
+  status: number | null;
+  userAgent: string;
+  body?: unknown;
+};
+
+const requests: RequestLog[] = [];
 
 Bun.serve({
   port: PORT,
@@ -66,10 +74,25 @@ Bun.serve({
   async fetch(req) {
     const url = new URL(req.url);
     if (url.pathname === "/__e2e/mail") return Response.json(sent);
-    // Every API call with its user agent, so graders can tell the CLI from hand-rolled HTTP.
+    // Every route an agent may use, so evals can distinguish page, docs, CLI, and raw HTTP paths.
     if (url.pathname === "/__e2e/requests") return Response.json(requests);
-    if (url.pathname.startsWith("/api/") || url.pathname.endsWith(".md")) {
-      requests.push({ method: req.method, path: url.pathname, userAgent: req.headers.get("user-agent") ?? "" });
+    let requestLog: RequestLog | null = null;
+    if (
+      url.pathname.startsWith("/api/") ||
+      url.pathname.startsWith("/i/") ||
+      url.pathname === "/skill.md" ||
+      url.pathname === "/api.md"
+    ) {
+      requestLog = {
+        method: req.method,
+        path: url.pathname,
+        status: null,
+        userAgent: req.headers.get("user-agent") ?? "",
+        ...(req.method === "POST" && url.pathname === "/api/dm/hi"
+          ? { body: await req.clone().json().catch(() => null) }
+          : {}),
+      };
+      requests.push(requestLog);
     }
     if (url.pathname === "/__e2e/mail/clear") {
       sent.length = 0;
@@ -78,18 +101,23 @@ Bun.serve({
     // What exists right now, for graders: handles and invite counts.
     if (url.pathname === "/__e2e/state") {
       const rows = await db.select({ name: handles.name, email: handles.email, publicKey: handles.publicKey, createdAt: handles.createdAt }).from(handles);
-      const inviteRows = await db.select({ creatorId: invites.creatorId, message: invites.message, redeemedAt: invites.redeemedAt }).from(invites);
+      const inviteRows = await db.select({ token: invites.token, creatorId: invites.creatorId, message: invites.message, redeemedAt: invites.redeemedAt }).from(invites);
       const byId = new Map((await db.select({ id: handles.id, name: handles.name }).from(handles)).map((h) => [h.id, h.name]));
       return Response.json({
         handles: rows,
-        invites: inviteRows.map((i) => ({ creator: byId.get(i.creatorId) ?? null, message: i.message, redeemed: i.redeemedAt !== null })),
+        invites: inviteRows.map((i) => ({ token: i.token, creator: byId.get(i.creatorId) ?? null, message: i.message, redeemed: i.redeemedAt !== null })),
       });
     }
+    let response: Response;
     if (req.method === "GET") {
       const file = staticFile(url.pathname);
-      if (file) return new Response(Bun.file(file));
+      if (file) response = new Response(Bun.file(file));
+      else response = await app.fetch(req, env);
+    } else {
+      response = await app.fetch(req, env);
     }
-    return app.fetch(req, env);
+    if (requestLog) requestLog.status = response.status;
+    return response;
   },
 });
 console.log(`e2e server on ${ORIGIN}`);

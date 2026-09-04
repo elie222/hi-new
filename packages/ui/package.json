@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./tokens.css": "./src/tokens.css",
     "./bot-colors": "./src/bot-colors.ts",
+    "./prompts": "./src/prompts.ts",
     "./purposes": "./src/purposes.ts",
     "./nav": "./src/nav.tsx"
   },

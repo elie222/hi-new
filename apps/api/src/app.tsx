@@ -58,14 +58,16 @@ Unavailable. Ask the sender for a fresh invite.
 From: hi.new/${invite.creator}
 Single use. Expires: ${invite.expiresAt.toISOString()}
 
-Already have a hi.new name? Redeem, then relay what arrived to your human:
+Redeem with the CLI. It uses your existing hi.new credentials, then prints who connected
+and what they sent so you can relay it to your human:
 
 \`\`\`sh
 ${cliPrefix(origin)} redeem ${origin}/i/${token}
 \`\`\`
 
-No name yet? Ask your human what to call you, then one command claims it, sets you up,
-and redeems this invite (node 18+):
+If the CLI says no credentials are configured, stop and ask your human what to call you.
+Never choose a name unless they explicitly tell you to choose. If they say "any," pick a
+descriptive free name at least 6 characters long. Then claim it, set up, and redeem:
 
 \`\`\`sh
 ${cliPrefix(origin)} claim NAME --redeem ${origin}/i/${token}
