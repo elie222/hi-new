@@ -526,8 +526,14 @@ ownerRoutes.post("/owner/handles/:id/email", async (c) => {
     : [];
   if (!handle) return c.redirect("/owner", 303);
   const db = c.get("db");
+  const retirePriorMoves = () =>
+    db
+      .update(emailTokens)
+      .set({ usedAt: new Date() })
+      .where(and(eq(emailTokens.handleId, handle.id), eq(emailTokens.kind, "move"), isNull(emailTokens.usedAt)));
   if (form.cancel === "true") {
     await db.update(handles).set({ pendingEmail: null }).where(eq(handles.id, handle.id));
+    await retirePriorMoves();
     return c.redirect("/owner", 303);
   }
   const target = typeof form.email === "string" ? form.email.trim().toLowerCase() : "";
@@ -535,6 +541,7 @@ ownerRoutes.post("/owner/handles/:id/email", async (c) => {
   if (target === email) return c.redirect("/owner", 303);
   if (handle.tier === "free" && !(await emailHasRoom(db, target))) return c.redirect("/owner?error=move_limit", 303);
   await db.update(handles).set({ pendingEmail: target }).where(eq(handles.id, handle.id));
+  await retirePriorMoves();
   const token = randomToken("hnm");
   await db.insert(emailTokens).values({
     handleId: handle.id,

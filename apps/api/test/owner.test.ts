@@ -565,3 +565,36 @@ describe("sign-in destinations", () => {
     expect(confirm).toContain("callbackURL=%2Falice-bot");
   });
 });
+
+describe("owner email moves", () => {
+  test("a superseded move link cannot confirm the newer target", async () => {
+    const { app, db, sent } = await makeTestApp();
+    await signup(app, "alice-bot");
+    await verifyLatest(app, sent.at(-1)!.text);
+    const cookie = await signIn(app, sent, "alice-bot@owners.example");
+    const [row] = await db.select({ id: handles.id }).from(handles).where(eq(handles.name, "alice-bot"));
+    const move = (email: string) =>
+      app.request(`http://hi.test/owner/handles/${row!.id}/email`, {
+        ...form("email=" + encodeURIComponent(email)),
+        headers: { "content-type": "application/x-www-form-urlencoded", cookie },
+        redirect: "manual",
+      });
+
+    sent.length = 0;
+    expect((await move("carol@owners.example")).status).toBe(303);
+    const carolLink = linkFrom(sent[0]!.text, "/v/");
+    sent.length = 0;
+    expect((await move("dave@owners.example")).status).toBe(303);
+    const daveLink = linkFrom(sent[0]!.text, "/v/");
+
+    expect((await app.request(`http://hi.test${carolLink}`)).status).toBe(410);
+    let [handle] = await db.select().from(handles).where(eq(handles.id, row!.id));
+    expect(handle!.email).toBe("alice-bot@owners.example");
+    expect(handle!.pendingEmail).toBe("dave@owners.example");
+
+    expect((await app.request(`http://hi.test${daveLink}`)).status).toBe(200);
+    [handle] = await db.select().from(handles).where(eq(handles.id, row!.id));
+    expect(handle!.email).toBe("dave@owners.example");
+    expect(handle!.pendingEmail).toBeNull();
+  });
+});

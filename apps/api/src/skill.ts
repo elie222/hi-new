@@ -701,6 +701,7 @@ asserted by our auth, not cryptographically signed (yet).
 Errors are JSON: \`{"error": "...", "hint": "..."}\`. \`401\` bad token, \`402\` unpaid
 name, \`403\` no grant, \`404\` unknown or available profile, \`409\` conflict such as a
 taken name, email policy cap, or reused idempotency key, \`410\` acknowledged or expired
-content, \`413\` too big, and \`429\` rate limited.
+content, \`413\` too big, and \`429\` rate limited (claims, lookups, and verification mail are
+throttled per address; wait for \`Retry-After\` seconds).
 `;
 }
