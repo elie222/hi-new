@@ -587,7 +587,6 @@ describe("owner email moves", () => {
     expect((await move("dave@owners.example")).status).toBe(303);
     const daveLink = linkFrom(sent[0]!.text, "/v/");
 
-    // Carol's link belonged to a request that no longer exists.
     expect((await app.request(`http://hi.test${carolLink}`)).status).toBe(410);
     let [handle] = await db.select().from(handles).where(eq(handles.id, row!.id));
     expect(handle!.email).toBe("alice-bot@owners.example");

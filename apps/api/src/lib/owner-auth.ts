@@ -36,8 +36,6 @@ export function createOwnerAuth(opts: { db: Db; origin: string; env: OwnerAuthEn
   const { db, origin, env, sendEmail } = opts;
   const providers = ownerProviders(env);
   const production = origin.startsWith("https://");
-  // A known placeholder secret would let anyone forge owner sessions, so a
-  // deployment without the real one refuses owner sign-in instead.
   if (!env.BETTER_AUTH_SECRET && production) {
     throw new Error("BETTER_AUTH_SECRET is unset; owner sign-in is disabled until it is configured");
   }

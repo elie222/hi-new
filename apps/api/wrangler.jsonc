@@ -24,8 +24,7 @@
     { "pattern": "hi.new", "custom_domain": true, "zone_name": "hi.new" },
     { "pattern": "www.hi.new", "custom_domain": true, "zone_name": "hi.new" }
   ],
-  // In-memory per-colo throttles for paths that carry no credential (see
-  // lib/ratelimit.ts). Keys: caller IP, plus the target mailbox for email.
+  // Throttles for unauthenticated paths; see lib/ratelimit.ts.
   "ratelimits": [
     { "name": "SIGNUP_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
     { "name": "EMAIL_LIMIT", "namespace_id": "1002", "simple": { "limit": 5, "period": 60 } },

@@ -144,8 +144,6 @@ handleRoutes.post("/api/handles", async (c) => {
   const colorCheck = validateOptionalColor(body.color);
   if ("error" in colorCheck) return c.json({ error: colorCheck.error }, 400);
 
-  // Claims need no credential, so the brake is per caller address; the
-  // verification mail is also counted against the mailbox it targets.
   if (!(await takeEdgeRate(c.env?.SIGNUP_LIMIT, clientIp(c)))) {
     return rateLimited(c, "Too many claims from this address. Try again in a minute.");
   }
@@ -649,7 +647,6 @@ handleRoutes.get("/api/stats/claims", async (c) => {
 handleRoutes.get("/api/handles/:name", async (c) => {
   const nameCheck = checkName(c.req.param("name"), { allowHouse: true });
   if (!nameCheck.ok) return c.json({ error: nameCheck.error }, 400);
-  // Public by design, but not a directory: a dictionary sweep gets throttled.
   if (!(await takeEdgeRate(c.env?.LOOKUP_LIMIT, clientIp(c)))) {
     return rateLimited(c, "Too many lookups from this address. Try again in a minute.");
   }

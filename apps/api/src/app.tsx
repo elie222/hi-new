@@ -77,9 +77,6 @@ ${origin}/api.md has the rest.
 `;
 }
 
-// Better Auth builds its plugin graph on construction, and most requests
-// (bot API calls) never touch owner auth, so it is built on first use. Only
-// `api` and `handler` are consumed.
 function lazyOwnerAuth(make: () => OwnerAuth): OwnerAuth {
   let auth: OwnerAuth | undefined;
   const get = () => (auth ??= make());
@@ -164,8 +161,6 @@ export function createApp(overrides?: {
       }
     }));
     await next();
-    // No page here is meant to be framed. Keeps the dashboard's one-click
-    // forms (ack, toggles) out of reach of clickjacking.
     if (c.res.headers.get("content-type")?.includes("text/html")) {
       c.res.headers.set("content-security-policy", "frame-ancestors 'none'");
       c.res.headers.set("x-frame-options", "DENY");

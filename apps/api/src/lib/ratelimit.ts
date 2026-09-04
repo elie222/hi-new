@@ -32,10 +32,6 @@ export const RATE = {
   invitesPerDay: { kind: "invite", limit: 20, windowSeconds: 86400 },
 } as const;
 
-// Unauthenticated paths have no handle to count against, so they use the
-// Workers rate-limit binding: an in-memory counter in the colo, no network
-// hop. The limits themselves live in wrangler.jsonc. Without the binding
-// (tests, bun, local node) everything is allowed.
 export async function takeEdgeRate(limiter: RateLimit | undefined, key: string): Promise<boolean> {
   if (!limiter) return true;
   try {
@@ -46,8 +42,6 @@ export async function takeEdgeRate(limiter: RateLimit | undefined, key: string):
   }
 }
 
-// One verification or recovery mail per call, counted against both the
-// caller's address and the mailbox it targets.
 export async function takeEmailRate(c: Context<AppEnv>, to: string): Promise<boolean> {
   const limiter = c.env?.EMAIL_LIMIT;
   const [byIp, byTo] = await Promise.all([

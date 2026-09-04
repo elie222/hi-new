@@ -526,8 +526,6 @@ ownerRoutes.post("/owner/handles/:id/email", async (c) => {
     : [];
   if (!handle) return c.redirect("/owner", 303);
   const db = c.get("db");
-  // Earlier move links die with the request they belonged to, so a stale
-  // link in one mailbox can never confirm a move to a different address.
   const retirePriorMoves = () =>
     db
       .update(emailTokens)

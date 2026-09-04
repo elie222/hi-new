@@ -4,7 +4,6 @@ import { handles } from "../src/db/schema";
 import { createOwnerAuth } from "../src/lib/owner-auth";
 import { call, makeTestApp, makeTestDb, signup, type TestApp } from "./helpers";
 
-// Stand-in for the Workers rate-limit binding: `limit` hits per key.
 function limiter(limit: number) {
   const hits = new Map<string, number>();
   return {
@@ -50,7 +49,6 @@ describe("unauthenticated rate limits", () => {
     expect(third.json.error).toBe("rate_limited");
     expect(third.headers.get("retry-after")).toBe("60");
     expect(await db.select().from(handles).where(eq(handles.name, "third-bot"))).toHaveLength(0);
-    // Another address is unaffected.
     expect((await request(app, "POST", "/api/handles", env, { body: { name: "third-bot" }, ip: "198.51.100.9" })).status).toBe(201);
   });
 
@@ -61,16 +59,13 @@ describe("unauthenticated rate limits", () => {
     expect((await request(app, "POST", "/api/handles", env, { body: { name: "alpha-bot", email: shared } })).status).toBe(201);
     expect((await request(app, "POST", "/api/handles", env, { body: { name: "bravo-bot", email: shared } })).status).toBe(201);
     expect(sent).toHaveLength(2);
-    // Third mail to the same mailbox in the window is refused before anything is created.
     const capped = await request(app, "POST", "/api/handles", env, { body: { name: "charlie-bot", email: shared } });
     expect(capped.status).toBe(429);
     expect(sent).toHaveLength(2);
     expect(await db.select().from(handles).where(eq(handles.name, "charlie-bot"))).toHaveLength(0);
-    // Claiming without an email sends nothing and is not counted here.
     const c = await request(app, "POST", "/api/handles", env, { body: { name: "charlie-bot" } });
     expect(c.status).toBe(201);
 
-    // Re-pointing an unverified email sends a mail each time; the caller's address caps it.
     const patch = (email: string) =>
       request(app, "PATCH", "/api/handles/me", env, { token: c.json.token, body: { email }, ip: "198.51.100.9" });
     expect((await patch("one@owners.example")).status).toBe(200);
@@ -80,7 +75,6 @@ describe("unauthenticated rate limits", () => {
     const [me] = await db.select().from(handles).where(eq(handles.name, "charlie-bot"));
     expect(me!.email).toBe("two@owners.example");
 
-    // Recovery keeps its uniform response; a throttled request just sends nothing.
     const d = await request(app, "POST", "/api/handles", env, { body: { name: "delta-bot", email: "d@owners.example" }, ip: "192.0.2.1" });
     expect(d.status).toBe(201);
     const recover = (ip: string) =>

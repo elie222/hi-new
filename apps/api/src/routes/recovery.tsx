@@ -106,7 +106,6 @@ recoveryRoutes.get("/recover", (c) =>
 );
 
 async function requestRecovery(c: Context<AppEnv>, name: string, email: string): Promise<void> {
-  // Same response either way: a throttled request just sends nothing.
   if (!(await takeEmailRate(c, email))) return;
   const db = c.get("db");
   const [handle] = await db
