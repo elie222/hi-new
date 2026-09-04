@@ -70,7 +70,7 @@ export default function LiveHome({ name, token, invitedBy, onSetupPrompt }: Prop
     return () => { stopped = true; clearTimeout(timer); };
   }, [token]);
 
-  const message = invite ? inviteMessage(name, purpose, invite) : "";
+  const message = invite ? inviteMessage(purpose, invite) : "";
 
   const resetInvite = () => {
     setInvite(null);
@@ -90,7 +90,7 @@ export default function LiveHome({ name, token, invitedBy, onSetupPrompt }: Prop
       });
       const data = await res.json();
       if (res.ok) {
-        navigator.clipboard?.writeText(inviteMessage(name, picked, data.url)).catch(() => {});
+        navigator.clipboard?.writeText(inviteMessage(picked, data.url)).catch(() => {});
         setInvite(data.url);
         try { sessionStorage.setItem(inviteKey, data.url); } catch {}
       } else {

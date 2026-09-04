@@ -1,151 +1,247 @@
-// Watch a real agent follow hi.new's instructions, locally.
+// Run a real agent against local hi.new and grade observable behavior plus its report.
 //
-//   bun scripts/bot-eval.ts --agent codex|claude|cursor [--scenario setup|invite] [--timeout 600]
-//
-// Starts the in-memory test server, prepares the scenario (a claimed name and
-// a setup code, or an invite from another bot), hands the agent CLI the exact
-// text a human would paste, in an empty scratch directory, and then grades
-// what the API saw: names claimed, key registered, welcome read and acked,
-// the "hi" round trip, invites made, and how long the agent's report was.
-// Everything lands in .bot-evals/<timestamp>-<agent>-<scenario>/.
+//   bun scripts/bot-eval.ts --agent codex|claude|cursor \
+//     --scenario setup|invite-existing|invite-unconfigured \
+//     [--prompt-style app-share|natural] [--followup any] [--timeout 600]
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { VERSION as CLI_VERSION } from "../packages/cli/src/cli";
+import { createFixture } from "./bot-eval/fixture";
+import { gradeScenario } from "./bot-eval/grade";
+import { judgeResponse } from "./bot-eval/judge";
+import { readTextIfPresent, runCommand } from "./bot-eval/process";
+import type { Agent, ApiCall, EvalState, PromptStyle, RequestLog, Scenario } from "./bot-eval/types";
 
-type Agent = "codex" | "claude" | "cursor";
 const args = process.argv.slice(2);
-const opt = (name: string, fallback: string) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
+const option = (name: string, fallback: string) => {
+  const index = args.indexOf(`--${name}`);
+  return index >= 0 && args[index + 1] ? args[index + 1]! : fallback;
 };
-const agent = opt("agent", "codex") as Agent;
-const scenario = opt("scenario", "setup") as "setup" | "invite";
-const timeoutS = Number(opt("timeout", "600"));
+
+const agent = option("agent", "codex") as Agent;
+const scenario = option("scenario", "setup") as Scenario;
+const promptStyle = option("prompt-style", "app-share") as PromptStyle;
+const followup = option("followup", "");
+const judgeModel = option("judge-model", "gpt-5.4");
+const timeoutSeconds = Number(option("timeout", "600"));
+if (!["codex", "claude", "cursor"].includes(agent)) throw new Error(`unknown agent: ${agent}`);
+if (!["setup", "invite-existing", "invite-unconfigured"].includes(scenario)) throw new Error(`unknown scenario: ${scenario}`);
+if (!["app-share", "natural"].includes(promptStyle)) throw new Error(`unknown prompt style: ${promptStyle}`);
+if (scenario === "setup" && promptStyle !== "app-share") throw new Error("setup only supports --prompt-style app-share");
+if (followup && followup !== "any") throw new Error(`unknown followup: ${followup}`);
+if (followup && (agent !== "codex" || scenario !== "invite-unconfigured")) {
+  throw new Error("--followup any currently requires --agent codex --scenario invite-unconfigured");
+}
+if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) throw new Error("timeout must be a positive number");
+
 const root = new URL("..", import.meta.url).pathname;
 const port = 4800 + Math.floor(Math.random() * 100);
 const origin = `http://127.0.0.1:${port}`;
-const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-const outDir = join(root, ".bot-evals", `${stamp}-${agent}-${scenario}`);
+const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+const suffix = Math.random().toString(36).slice(2, 8);
+const runName = `${stamp}-${process.pid}-${suffix}-${agent}-${scenario}-${promptStyle}${followup ? `-followup-${followup}` : ""}`;
+const outDir = join(root, ".bot-evals", runName);
+const workDir = mkdtempSync(join(tmpdir(), "hi-new-eval-"));
+const hiNewHome = join(workDir, ".hi-new");
 mkdirSync(outDir, { recursive: true });
 
-const unique = (p: string) => `${p}-${Math.random().toString(36).slice(2, 7)}`;
-const api = async (path: string, init: RequestInit = {}, token?: string) => {
-  const res = await fetch(origin + path, {
+const api: ApiCall = async <T>(path: string, init: RequestInit = {}, token?: string, expectedStatus?: number) => {
+  const response = await fetch(origin + path, {
     ...init,
-    headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...(init.headers ?? {}) },
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(init.headers ?? {}),
+    },
   });
-  return { status: res.status, json: await res.json().catch(() => null) };
+  const json = await response.json().catch(() => null) as T;
+  if (expectedStatus !== undefined && response.status !== expectedStatus) {
+    throw new Error(`${init.method ?? "GET"} ${path} returned ${response.status}, expected ${expectedStatus}`);
+  }
+  return { status: response.status, json };
 };
 
-// 1. Server (needs the built landing for the setup shell; build once if missing).
-if (!existsSync(join(root, "apps/landing/dist/index.html"))) {
-  console.log("building landing…");
-  await new Promise<void>((ok, fail) => {
-    const b = spawn("bun", ["run", "build"], { cwd: join(root, "apps/landing"), stdio: "inherit" });
-    b.on("exit", (c) => (c === 0 ? ok() : fail(new Error("landing build failed"))));
+let server: ReturnType<typeof spawn> | null = null;
+const stopServer = () => {
+  if (server?.exitCode === null) server.kill("SIGTERM");
+};
+process.once("exit", stopServer);
+
+try {
+  if (!existsSync(join(root, "apps/landing/dist/index.html"))) {
+    const build = await runCommand(["bun", "run", "build"], {
+      cwd: join(root, "apps/landing"),
+      env: process.env,
+      timeoutMs: 180_000,
+      stdoutPath: join(outDir, "build-stdout.txt"),
+      stderrPath: join(outDir, "build-stderr.txt"),
+      echoStdout: true,
+    });
+    if (build.exitCode !== 0) throw new Error("landing build failed");
+  }
+
+  server = spawn("bun", ["e2e/server.ts"], {
+    cwd: join(root, "apps/api"),
+    env: { ...process.env, E2E_PORT: String(port) },
+    stdio: "ignore",
   });
-}
-const server = spawn("bun", ["e2e/server.ts"], { cwd: join(root, "apps/api"), env: { ...process.env, E2E_PORT: String(port) }, stdio: "ignore" });
-// pglite plus migrations take about ten seconds to come up.
-let up = false;
-for (let i = 0; i < 120 && !up; i++) {
-  try { up = (await fetch(origin + "/api/owner/session")).ok; } catch { /* not yet */ }
-  if (!up) await new Promise((r) => setTimeout(r, 500));
-}
-if (!up) { server.kill(); throw new Error("test server did not start"); }
+  let serverError: Error | null = null;
+  server.once("error", (error) => { serverError = error; });
+  let serverReady = false;
+  for (let attempt = 0; attempt < 120 && !serverReady; attempt++) {
+    try {
+      serverReady = (await fetch(origin + "/api/owner/session")).ok;
+    } catch {
+      // PGlite and migrations are still starting.
+    }
+    if (!serverReady) await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  if (!serverReady) throw serverError ?? new Error("test server did not start");
 
-// 2. Scenario.
-let prompt = "";
-let token = "";
-let name = "";
-let peerToken = "";
-if (scenario === "setup") {
-  name = unique("eval");
-  const claim = await api("/api/handles", { method: "POST", body: JSON.stringify({ name }) });
-  token = claim.json.token;
-  const code = (await api("/api/handles/me/setup-code", { method: "POST" }, token)).json.code;
-  // Exactly what the setup page shows, for this origin.
-  prompt = `I got you a name so you can message other bots!\nYou're hi.new/${name}.\nInstructions: ${origin}/skill.md\nSetup code: ${code}`;
-} else {
-  const inviter = unique("friend");
-  peerToken = (await api("/api/handles", { method: "POST", body: JSON.stringify({ name: inviter }) })).json.token;
-  const invite = await api("/api/invites", { method: "POST", body: JSON.stringify({ message: "My bot wants to say hi to yours." }) }, peerToken);
-  name = unique("newbot");
-  prompt = `Get yourself a name on hi.new (call yourself ${name}) and connect to my friend's bot.\n\nConnect me to hi.new/${inviter}:\n${invite.json.url}.md`;
-}
-const before = (await api("/__e2e/state")).json;
-const requestsBefore = ((await api("/__e2e/requests")).json as unknown[]).length;
-writeFileSync(join(outDir, "prompt.txt"), prompt);
+  const fixture = await createFixture({ scenario, promptStyle, api, origin, hiNewHome });
+  const before = (await api<EvalState>("/__e2e/state", {}, undefined, 200)).json;
+  const requestsBefore = (await api<RequestLog[]>("/__e2e/requests", {}, undefined, 200)).json.length;
+  writeFileSync(join(outDir, "prompt.txt"), fixture.prompt);
+  writeFileSync(join(outDir, "fixture.json"), JSON.stringify({
+    scenario,
+    prompt_source: fixture.promptSource,
+    prompt_style: promptStyle,
+    followup: followup || null,
+    recipient_state: scenario === "invite-existing" ? "configured" : scenario === "invite-unconfigured" ? "unconfigured" : "claimed_with_setup_code",
+    capability_profile: "inherited-host-agent",
+  }, null, 2));
 
-// 3. Run the agent in an empty directory, non-interactively.
-const work = mkdtempSync(join(tmpdir(), "hi-new-eval-"));
-const cmd: Record<Agent, string[]> = {
-  // Codex's own sandbox blocks localhost on macOS; the scratch directory is the sandbox
-  // here. Run this from a normal terminal: inside another agent's sandbox, Codex's tool
-  // host fails to start.
-  codex: ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", "-C", work, "-o", join(outDir, "last-message.txt"), prompt],
-  claude: ["claude", "-p", prompt, "--dangerously-skip-permissions", "--output-format", "text"],
-  cursor: ["cursor-agent", "-p", prompt, "--force", "--output-format", "text"],
-};
-console.log(`running ${agent} (${scenario}) against ${origin} in ${work}`);
-const started = Date.now();
-const output = await new Promise<string>((resolve) => {
-  const [bin, ...rest] = cmd[agent];
-  const child = spawn(bin!, rest, { cwd: work, env: { ...process.env, HI_NEW_ORIGIN: origin, HI_NEW_HOME: join(work, ".hi-new") }, stdio: ["ignore", "pipe", "pipe"] });
-  let buf = "";
-  child.stdout.on("data", (d) => { buf += d; process.stdout.write(d); });
-  child.stderr.on("data", (d) => { buf += d; });
-  const timer = setTimeout(() => { child.kill("SIGTERM"); buf += "\n[timed out]"; }, timeoutS * 1000);
-  child.on("exit", () => { clearTimeout(timer); resolve(buf); });
-});
-const seconds = Math.round((Date.now() - started) / 1000);
-writeFileSync(join(outDir, "output.txt"), output);
+  const finalMessagePath = join(outDir, "final-message.txt");
+  const actorEnv = { ...process.env, HI_NEW_ORIGIN: origin, HI_NEW_HOME: hiNewHome };
+  const commands: Record<Agent, string[]> = {
+    codex: [
+      "codex", "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
+      "--skip-git-repo-check", "-C", workDir, "-o", finalMessagePath, fixture.prompt,
+    ],
+    claude: ["claude", "-p", fixture.prompt, "--dangerously-skip-permissions", "--output-format", "text"],
+    cursor: ["cursor-agent", "-p", fixture.prompt, "--force", "--output-format", "text"],
+  };
+  console.log(`running ${agent} (${scenario}, ${promptStyle}) against ${origin}`);
+  const startedAt = Date.now();
+  let actor = await runCommand(commands[agent], {
+    cwd: workDir,
+    env: actorEnv,
+    timeoutMs: timeoutSeconds * 1_000,
+    stdoutPath: join(outDir, followup ? "turn-1-stdout.txt" : "stdout.txt"),
+    stderrPath: join(outDir, followup ? "turn-1-stderr.txt" : "stderr.txt"),
+    echoStdout: true,
+    detectCodexThread: agent === "codex",
+  });
+  let finalMessage = agent === "codex"
+    ? (readTextIfPresent(finalMessagePath) ?? "").trim()
+    : actor.stdout.trim();
+  let firstTurnFinalMessage: string | null = null;
+  let afterFirstTurn: EvalState | null = null;
+  let firstTurnRequestCount: number | null = null;
 
-// 4. Grade from the API's point of view. Snapshot the request log first, before the
-// grader's own calls land in it.
-const requests = ((await api("/__e2e/requests")).json as { method: string; path: string; userAgent: string }[]).slice(requestsBefore);
-const after = (await api("/__e2e/state")).json;
-const newHandles = after.handles.filter((h: { name: string }) => !before.handles.some((b: { name: string }) => b.name === h.name));
-if (scenario === "invite") {
-  // The agent claimed its own name; find its token is impossible, so grade by state only.
-}
-const mine = after.handles.find((h: { name: string }) => h.name === name);
-const grade: Record<string, unknown> = {
-  agent, scenario, seconds,
-  named_handle_exists: Boolean(mine),
-  extra_handles_claimed: newHandles.filter((h: { name: string }) => h.name !== name).map((h: { name: string }) => h.name),
-  key_registered: Boolean(mine?.publicKey),
-  email_attached: mine?.email ?? null,
-  invites_made: after.invites.length - before.invites.length,
-};
-if (token) {
-  const me = (await api("/api/handles/me", {}, token)).json;
-  const activity = (await api("/api/messages/activity", {}, token)).json?.messages ?? [];
-  const welcome = activity.find((m: any) => m.direction === "incoming" && m.from === "hi" && !m.opener);
-  grade.setup_code_traded = me?.setup_pending === false;
-  grade.welcome_status = welcome?.status ?? "not delivered";
-  grade.said_hi_to_house = activity.some((m: any) => m.direction === "outgoing" && m.to === "hi");
-  grade.other_outgoing = activity.filter((m: any) => m.direction === "outgoing" && m.to !== "hi").length;
-}
-if (peerToken) {
-  const grants = (await api("/api/grants", {}, peerToken)).json?.grants ?? [];
-  grade.redeemed = grants.some((g: { name: string }) => g.name === name);
-  const peerActivity = (await api("/api/messages/activity", {}, peerToken)).json?.messages ?? [];
-  grade.messages_received_by_friend = peerActivity.filter((m: any) => m.direction === "incoming" && m.from === name && m.tag === "granted").length;
-}
-// Which path the agent took: the CLI announces itself with its user agent.
-grade.api_calls = requests.length;
-grade.cli_calls = requests.filter((r) => r.userAgent.startsWith("hi-new-cli/")).length;
-grade.user_agents = [...new Set(requests.map((r) => r.userAgent.split(" ")[0]))];
-writeFileSync(join(outDir, "requests.json"), JSON.stringify(requests, null, 2));
-const last = output.trim().split("\n").filter(Boolean);
-grade.report_words = last.slice(-12).join(" ").split(/\s+/).length;
-grade.mentions_polling = /poll|schedule|cron/i.test(last.slice(-12).join(" "));
-writeFileSync(join(outDir, "grade.json"), JSON.stringify(grade, null, 2));
-writeFileSync(join(outDir, "state.json"), JSON.stringify(after, null, 2));
+  if (followup) {
+    firstTurnFinalMessage = finalMessage;
+    writeFileSync(join(outDir, "turn-1-final-message.txt"), `${firstTurnFinalMessage}\n`);
+    afterFirstTurn = (await api<EvalState>("/__e2e/state", {}, undefined, 200)).json;
+    firstTurnRequestCount = (await api<RequestLog[]>("/__e2e/requests", {}, undefined, 200)).json.length - requestsBefore;
+    if (!actor.threadId) throw new Error("Codex did not report a thread id for the follow-up turn");
+    const firstExitCode = actor.exitCode;
+    const secondTurn = await runCommand([
+      "codex", "exec", "resume", "--json", "--dangerously-bypass-approvals-and-sandbox",
+      "--skip-git-repo-check", "-o", finalMessagePath, actor.threadId, followup,
+    ], {
+      cwd: workDir,
+      env: actorEnv,
+      timeoutMs: timeoutSeconds * 1_000,
+      stdoutPath: join(outDir, "turn-2-stdout.txt"),
+      stderrPath: join(outDir, "turn-2-stderr.txt"),
+      echoStdout: true,
+    });
+    actor = {
+      ...secondTurn,
+      exitCode: firstExitCode === 0 ? secondTurn.exitCode : firstExitCode,
+      timedOut: actor.timedOut || secondTurn.timedOut,
+    };
+    finalMessage = (readTextIfPresent(finalMessagePath) ?? "").trim();
+  }
+  writeFileSync(finalMessagePath, `${finalMessage}${finalMessage ? "\n" : ""}`);
 
-server.kill();
-console.log("\n=== grade ===");
-for (const [k, v] of Object.entries(grade)) console.log(`${k.padEnd(28)} ${JSON.stringify(v)}`);
-console.log(`\nfiles: ${outDir}`);
+  const requests = (await api<RequestLog[]>("/__e2e/requests", {}, undefined, 200)).json.slice(requestsBefore);
+  const after = (await api<EvalState>("/__e2e/state", {}, undefined, 200)).json;
+  const processOk = actor.exitCode === 0 && !actor.timedOut;
+  const scenarioGrade = await gradeScenario({
+    fixture,
+    before,
+    after,
+    afterFirstTurn,
+    requests,
+    firstTurnRequestCount,
+    firstTurnFinalMessage,
+    finalMessage,
+    followup,
+    processOk,
+    origin,
+    hiNewHome,
+    api,
+  });
+  writeFileSync(join(outDir, "requests.json"), JSON.stringify(requests, null, 2));
+  writeFileSync(join(outDir, "state.json"), JSON.stringify(after, null, 2));
+  stopServer();
+
+  const cliUserAgents = requests.filter((request) => request.userAgent.startsWith("hi-new-cli/")).map((request) => request.userAgent);
+  const cliVersions = cliUserAgents.map((userAgent) => /^hi-new-cli\/([^\s]+)/.exec(userAgent)?.[1] ?? null);
+  const inboxReads = requests.filter((request) => request.method === "GET" && request.path === "/api/inbox" && request.status === 200).length;
+  const judgment = await judgeResponse({
+    deterministicPassed: scenarioGrade.deterministicPassed,
+    model: judgeModel,
+    outDir,
+    workDir,
+    scenario,
+    promptStyle,
+    prompt: fixture.prompt,
+    followup,
+    firstTurnFinalMessage,
+    finalMessage,
+    rubric: scenarioGrade.responseRubric,
+    facts: scenarioGrade.judgeFacts,
+  });
+  const grade = {
+    agent,
+    scenario,
+    prompt_style: promptStyle,
+    followup: followup || null,
+    seconds: Math.round((Date.now() - startedAt) / 1_000),
+    agent_exit_code: actor.exitCode,
+    timed_out: actor.timedOut,
+    inherited_host_capabilities: true,
+    new_handles_claimed: after.handles.filter((handle) => !before.handles.some((previous) => previous.name === handle.name)).map((handle) => handle.name),
+    invites_made: after.invites.length - before.invites.length,
+    page_requests: requests.filter((request) => request.path.startsWith("/i/") && !request.path.endsWith(".md")).map(({ method, path, status }) => ({ method, path, status })),
+    doc_requests: requests.filter((request) => request.path.endsWith(".md")).map(({ method, path, status }) => ({ method, path, status })),
+    api_request_count: requests.filter((request) => request.path.startsWith("/api/")).length,
+    cli_calls: cliUserAgents.length,
+    expected_cli_version: CLI_VERSION,
+    observed_cli_versions: [...new Set(cliVersions)],
+    cli_version_matches: cliVersions.length > 0 && cliVersions.every((version) => version === CLI_VERSION),
+    inbox_reads: inboxReads,
+    excessive_inbox_polling: inboxReads > 4,
+    report_words: finalMessage ? finalMessage.split(/\s+/).length : 0,
+    ...scenarioGrade.details,
+    deterministic_passed: scenarioGrade.deterministicPassed,
+    judge_model: judgeModel,
+    response_judgment: judgment,
+    passed: scenarioGrade.deterministicPassed && judgment.pass,
+  };
+  writeFileSync(join(outDir, "grade.json"), JSON.stringify(grade, null, 2));
+
+  console.log("\n=== grade ===");
+  for (const [key, value] of Object.entries(grade)) console.log(`${key.padEnd(28)} ${JSON.stringify(value)}`);
+  console.log(`\nfiles: ${outDir}`);
+  if (!grade.passed) process.exitCode = 1;
+} finally {
+  process.removeListener("exit", stopServer);
+  stopServer();
+  rmSync(workDir, { recursive: true, force: true });
+}

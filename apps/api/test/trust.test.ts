@@ -4,7 +4,7 @@ import { handles, invites, rateCounters } from "../src/db/schema";
 import { call, connect, makeTestApp, signup, peers, realMail } from "./helpers";
 
 describe("invites and grants", () => {
-  test("invite page exposes self-contained Markdown instructions", async () => {
+  test("invite route publishes actionable Markdown instructions", async () => {
     const { app } = await makeTestApp();
     const alice = await signup(app, "alice-bot");
     const bob = await signup(app, "bob-bot");
@@ -12,16 +12,18 @@ describe("invites and grants", () => {
     const token = invite.json.token;
 
     const htmlResponse = await app.request(`http://hi.test/i/${token}`);
-    const html = await htmlResponse.text();
-    expect(htmlResponse.headers.get("link")).toContain(`/i/${token}.md`);
-    expect(htmlResponse.headers.get("link")).toContain("rel=\"describedby\"");
-    expect(html).toContain(`rel="alternate" type="text/markdown" href="http://hi.test/i/${token}.md"`);
-    expect(html).toContain(`class="sr-only" href="http://hi.test/i/${token}.md">Agent instructions for this invite</a>`);
+    expect(htmlResponse.status).toBe(200);
+    expect(htmlResponse.headers.get("link")).toBe(
+      `<http://hi.test/i/${token}.md>; rel="alternate"; type="text/markdown", <http://hi.test/skill.md>; rel="describedby"; type="text/markdown"`,
+    );
 
     const markdownResponse = await app.request(`http://hi.test/i/${token}.md`);
     const markdown = await markdownResponse.text();
     expect(markdownResponse.headers.get("content-type")).toContain("text/markdown");
     expect(markdownResponse.headers.get("cache-control")).toBe("no-store");
+    expect(markdownResponse.headers.get("link")).toBe(
+      `<http://hi.test/i/${token}>; rel="alternate"; type="text/html", <http://hi.test/skill.md>; rel="describedby"; type="text/markdown"`,
+    );
     expect(markdown).toContain("From: hi.new/alice-bot");
     expect(markdown).toContain(`POST http://hi.test/api/invites/${token}/redeem`);
     expect(markdown).toContain("Authorization: Bearer hn_...");

@@ -11,6 +11,8 @@ import {
   isBotColor,
   MailIcon,
   shareOnXUrl,
+  setupCodePrompt,
+  setupTokenPrompt,
   StepFooter,
   XIcon,
   type BotColor,
@@ -107,9 +109,8 @@ function EmailRecoveryFields(props: {
 
 const MIN_CODE_LIFE_MS = 5 * 60_000;
 
-function grokBotLink(route: "open" | "plugin/add", params: Record<string, string> = {}): string {
-  const q = new URLSearchParams(params).toString();
-  return `grokbot://app/v1/${route}${q ? "?" + q : ""}`;
+function grokBotLink(): string {
+  return "grokbot://app/v1/open";
 }
 const desktop = typeof navigator !== "undefined" && !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
@@ -148,11 +149,9 @@ export default function SetupFlow() {
   const auth = (token: string) => ({ authorization: "Bearer " + token });
   const buildPrompt = (name: string, token: string) => {
     const fresh = code.current && Date.now() < code.current.expires;
-    const credential = fresh ? `Setup code: ${code.current!.value}` : `Token: ${token}`;
-    // The instructions link is this deployment's, so local and staging bots
-    // read the matching skill doc and call the matching API.
-    const connect = invitedBy.current ? `\nConnect me to hi.new/${invitedBy.current.from}:\n${location.origin}/i/${invitedBy.current.token}.md` : "";
-    return `I got you a name so you can message other bots!\nYou're hi.new/${name}.\nInstructions: ${location.origin}/skill.md\n${credential}${connect}`;
+    return fresh
+      ? setupCodePrompt(location.origin, name, code.current!.value, invitedBy.current)
+      : setupTokenPrompt(location.origin, name, token, invitedBy.current);
   };
 
   // The prompt carries a one-time setup code the bot trades for the token,
@@ -425,7 +424,7 @@ export default function SetupFlow() {
                 <a
                   id="open-grokbot"
                   className={openedGrokBot ? "btn btn-secondary" : "btn"}
-                  href={grokBotLink("open")}
+                  href={grokBotLink()}
                   onClick={() => setOpenedGrokBot(true)}
                 >Open Grok Bot</a>
               )}

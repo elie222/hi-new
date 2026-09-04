@@ -1,25 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { call, connect, makeTestApp, signup, peers } from "./helpers";
 
-async function mcp(app: any, method: string, params?: unknown, token?: string) {
-  return call(app, "POST", "/mcp", {
-    token,
-    body: {
-      jsonrpc: "2.0",
-      id: 1,
-      method,
-      ...(params === undefined ? {} : { params }),
-    },
-  });
-}
+const protocol = "2026-07-28";
 
-async function modernMcp(
+async function mcp(
   app: any,
   method: string,
-  params: Record<string, unknown>,
-  token: string,
+  params: Record<string, unknown> = {},
+  token?: string,
 ) {
-  const protocol = "2026-07-28";
   return call(app, "POST", "/mcp", {
     token,
     headers: {
@@ -31,7 +20,7 @@ async function modernMcp(
     },
     body: {
       jsonrpc: "2.0",
-      id: 2,
+      id: 1,
       method,
       params: {
         ...params,
@@ -69,13 +58,6 @@ describe("MCP", () => {
   test("advertises tools and calls the same authenticated API", async () => {
     const { app } = await makeTestApp();
     const alice = await signup(app, "alice-bot");
-    const initialized = await mcp(
-      app,
-      "initialize",
-      { protocolVersion: "2025-06-18" },
-      alice.token,
-    );
-    expect(initialized.json.result.serverInfo.name).toBe("hi.new");
     const listed = await mcp(app, "tools/list", {}, alice.token);
     expect(
       listed.json.result.tools.some(
@@ -101,19 +83,18 @@ describe("MCP", () => {
     expect(unauthenticated.status).toBe(401);
     expect(unauthenticated.json.error).toBe("missing_bearer");
 
-    const discovered = await modernMcp(app, "server/discover", {}, alice.token);
+    const discovered = await mcp(app, "server/discover", {}, alice.token);
     expect(discovered.json.result.supportedVersions).toContain("2026-07-28");
-    const modernList = await modernMcp(app, "tools/list", {}, alice.token);
-    expect(modernList.json.result.resultType).toBe("complete");
-    expect(modernList.json.result.cacheScope).toBe("private");
-    const modernCall = await modernMcp(
+    expect(listed.json.result.resultType).toBe("complete");
+    expect(listed.json.result.cacheScope).toBe("private");
+    const profile = await mcp(
       app,
       "tools/call",
       { name: "get_profile", arguments: {} },
       alice.token,
     );
-    expect(modernCall.json.result.resultType).toBe("complete");
-    expect(JSON.parse(modernCall.json.result.content[0].text).name).toBe("alice-bot");
+    expect(profile.json.result.resultType).toBe("complete");
+    expect(JSON.parse(profile.json.result.content[0].text).name).toBe("alice-bot");
 
     const notification = await mcpTool(app, alice.token, "create_notification", {
       kind: "webhook",
@@ -198,6 +179,13 @@ describe("MCP", () => {
     expect(unsupported.json.error.code).toBe(-32022);
     expect(unsupported.json.error.data.supported).toContain("2026-07-28");
 
+    const missingProtocol = await call(app, "POST", "/mcp", {
+      token: alice.token,
+      body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+    });
+    expect(missingProtocol.status).toBe(400);
+    expect(missingProtocol.json.error.code).toBe(-32022);
+
     const missingMetadata = await call(app, "POST", "/mcp", {
       token: alice.token,
       headers: {
@@ -216,18 +204,18 @@ describe("MCP", () => {
     expect(missingMetadata.status).toBe(400);
     expect(missingMetadata.json.error.code).toBe(-32602);
 
-    const modernInitialize = await modernMcp(
+    const initialize = await mcp(
       app,
       "initialize",
       { protocolVersion: "2026-07-28" },
       alice.token,
     );
-    expect(modernInitialize.status).toBe(404);
-    expect(modernInitialize.json.error.code).toBe(-32601);
+    expect(initialize.status).toBe(404);
+    expect(initialize.json.error.code).toBe(-32601);
     const unknown = await mcp(app, "not/a-method", {}, alice.token);
     expect(unknown.status).toBe(404);
     expect(unknown.json.error.code).toBe(-32601);
-    expect((await mcp(app, "notifications/initialized", {}, alice.token)).status).toBe(202);
+    expect((await mcp(app, "notifications/initialized", {}, alice.token)).status).toBe(404);
   });
 
   test("keeps tool errors in-band and preserves scoped approval boundaries", async () => {
