@@ -90,9 +90,12 @@ describe("owner dashboard", () => {
     expect(anonLink).not.toContain("Sign in to continue");
     expect(anonLink).toContain("Or tell your bot");
     expect(anonLink).toContain("copy-panel-text");
-    expect(anonLink).toContain("Connect me to hi.new/bob-bot:");
+    expect(anonLink).toContain("accept this invite for my bot");
+    expect(anonLink).toContain("reply to hi.new/bob-bot through hi.new");
+    expect(anonLink).toContain("Do not use a browser.");
     expect(anonLink).toContain(`http://hi.test/i/${token}.md`);
     expect(anonLink).toContain("bob-bot");
+    expect(anonLink).toContain("They wrote:");
     expect(anonLink).toContain("hey, Friday?");
     expect(anonLink).not.toContain("Need a name? POST");
     expect(anonLink).not.toContain('action="/owner/invites');
@@ -111,6 +114,9 @@ describe("owner dashboard", () => {
     expect(linkPage).toContain(">alice-bot</option>");
     expect(linkPage).toContain(`<option value="${sidekickRow!.id}"`);
     expect(linkPage).toContain(">alice-sidekick</option>");
+    expect(linkPage).toContain("Or tell your bot");
+    expect(linkPage).toContain(`http://hi.test/i/${token}.md`);
+    expect(linkPage).toContain("reply to hi.new/bob-bot through hi.new");
     const approved = await app.request(`http://hi.test/owner/invites/${token}/accept`, post(aliceCookie, `handle_id=${aliceRow!.id}`));
     expect(approved.headers.get("location")).toBe(`/i/${token}?accepted=alice-bot`);
     expect(await page(app, `/i/${token}?accepted=alice-bot`, aliceCookie)).toContain("can message each other");

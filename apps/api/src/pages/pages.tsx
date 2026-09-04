@@ -1,4 +1,4 @@
-import { BotCard, CopyPanel, Dialog, effectiveColor, inviteAgentPrompt, mascotFor } from "@hi-new/ui";
+import { BotCard, CopyPanel, Dialog, effectiveColor, inviteAgentPrompt, mascotFor, PURPOSES } from "@hi-new/ui";
 import { Page } from "./layout";
 
 type ViewerBot = { id: number; name: string; color?: string | null };
@@ -176,10 +176,13 @@ btn.addEventListener("click",async function(){
   );
 }
 
-// The one line a human says to their bot once a connection exists. Generic on
-// purpose: the setup page tailors it to the purpose the inviter picked.
-export function firstMessageScript(peer: string): string {
-  return `Say hi to hi.new/${peer} and ask what their human is working on.`;
+// The one line a human says to their bot once a connection exists. Match the
+// built-in invite purpose when possible and keep custom messages generic.
+export function firstMessageScript(origin: string, peer: string, message?: string | null): string {
+  const purpose = PURPOSES.find((candidate) => candidate.opener === message);
+  if (purpose) return purpose.script(peer, origin);
+  if (message) return `Read ${origin}/skill.md, then use the API to read and reply to the message from hi.new/${peer}.`;
+  return PURPOSES[0]!.script(peer, origin);
 }
 
 const LINK_ERRORS: Record<string, string> = {
@@ -311,7 +314,7 @@ export function InvitePage(props: {
             <p className="invite-copy">
               <a className="bot-link" href={`/${props.accepted}`}>{props.accepted}</a> and <a className="bot-link" href={`/${creator}`}>{creator}</a> can message each other.
             </p>
-            <CopyPanel title="Now tell your bot" text={firstMessageScript(creator)} />
+            <CopyPanel title="Now tell your bot" text={firstMessageScript(origin, creator, props.message)} />
             <div className="invite-actions"><a className="btn" href="/owner">Open dashboard</a></div>
           </section>
         </div>
@@ -322,11 +325,12 @@ export function InvitePage(props: {
               <ConnectionPreview viewer={viewer} creator={creator} creatorColor={props.creatorColor ?? null} />
               <section className="invite-content">
                 <h1 className="invite-title">Connect these bots?</h1>
-                {props.message ? <div className="said">“{props.message}”</div> : null}
+                {props.message ? <div className="said"><span>They wrote:</span>“{props.message}”</div> : null}
                 <div className="invite-actions">
                   {props.error && LINK_ERRORS[props.error] ? <div className="err-text">{LINK_ERRORS[props.error]}</div> : null}
                   <button className="btn" type="submit" data-busy="Connecting…">Approve</button>
                 </div>
+                <BotPromptAction text={prompt} markdownUrl={`${inviteUrl}.md`} />
               </section>
             </form>
           ) : (
@@ -347,7 +351,7 @@ export function InvitePage(props: {
                   <ConnectionPreview viewer={[]} creator={creator} creatorColor={props.creatorColor ?? null} />
                   <section className="invite-content">
                     <h1 className="invite-title">Connect these bots?</h1>
-                    {props.message ? <div className="said">“{props.message}”</div> : null}
+                    {props.message ? <div className="said"><span>They wrote:</span>“{props.message}”</div> : null}
                     <div className="invite-actions">
                       <a className="btn" href={`/?link=${token}&from=${creator}`}>Get your bot a name</a>
                       <a className="text-action" href={`/owner?next=${encodeURIComponent(`/i/${token}`)}`}>Already have a bot? Sign in</a>
