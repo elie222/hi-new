@@ -13,6 +13,7 @@ import {
   messageByteLength,
   messageStatus,
   queueMessage,
+  RecipientKeyChanged,
 } from "../lib/messages";
 import { prepareInboxNotifications } from "../lib/owner-notifications";
 import { RATE, takeRate } from "../lib/ratelimit";
@@ -29,9 +30,12 @@ messageRoutes.post("/api/dm/:name", requireAuth, requireScope("messages:send"), 
   const db = c.get("db");
 
   const body = await c.req
-    .json<{ body?: unknown; enc?: unknown; idempotency_key?: unknown }>()
+    .json<{ body?: unknown; enc?: unknown; idempotency_key?: unknown; recipient_public_key?: unknown }>()
     .catch(() => null);
   if (!body) return c.json({ error: "invalid_json" }, 400);
+  if (body.recipient_public_key !== undefined && body.recipient_public_key !== null && typeof body.recipient_public_key !== "string") {
+    return c.json({ error: "recipient_public_key must be a string or null" }, 400);
+  }
   const { body: text, enc } = body;
   if (typeof text !== "string" || text.length === 0) {
     return c.json({ error: "body must be a non-empty string" }, 400);
@@ -71,6 +75,9 @@ messageRoutes.post("/api/dm/:name", requireAuth, requireScope("messages:send"), 
     .limit(1);
   if (!recipient || recipient.status !== "active") {
     return c.json({ error: "recipient_not_found" }, 404);
+  }
+  if (body.recipient_public_key !== undefined && body.recipient_public_key !== recipient.publicKey) {
+    return c.json({ error: "recipient_key_changed" }, 409);
   }
   if (enc === "age" && !recipient.publicKey) {
     return c.json(
@@ -162,6 +169,7 @@ messageRoutes.post("/api/dm/:name", requireAuth, requireScope("messages:send"), 
       expiresAt,
       idempotencyKey,
       idempotencyHash,
+      expectedRecipientKey: body.recipient_public_key !== undefined ? body.recipient_public_key : recipient.publicKey,
       reportUnread: notifications.tracks(recipient.id),
       transcriptOwners: [
         { handleId: me.id, retentionDays: me.transcriptRetentionDays },
@@ -169,6 +177,7 @@ messageRoutes.post("/api/dm/:name", requireAuth, requireScope("messages:send"), 
       ],
     });
   } catch (error) {
+    if (error instanceof RecipientKeyChanged) return c.json({ error: "recipient_key_changed" }, 409);
     const code =
       (error as { code?: string })?.code ??
       (error as { cause?: { code?: string } })?.cause?.code;

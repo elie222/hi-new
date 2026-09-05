@@ -232,6 +232,7 @@ function post(
 ): Promise<Response> {
   return fetch(url, {
     method: "POST",
+    redirect: "error",
     headers: {
       ...headers,
       "content-type": "application/json",

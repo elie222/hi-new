@@ -131,7 +131,7 @@ describe("signup", () => {
     expect(((await reprobe.json()) as { token: string }).token).toBe(token);
   });
 
-  test("Link MPP payment activates the handle and returns a fresh usable token", async () => {
+  test("Link MPP payment preserves the saved token and lost-response retries do not charge again", async () => {
     const { app, db } = await makeTestApp();
     const body = { name: "vlad", email: "vlad@owners.example" };
     const initial = await app.request(
@@ -166,7 +166,9 @@ describe("signup", () => {
 
     const originalFetch = globalThis.fetch;
     let stripeBody = "";
+    let stripeCalls = 0;
     globalThis.fetch = (async (input, init) => {
+      stripeCalls += 1;
       expect(String(input)).toBe("https://api.stripe.com/v1/payment_intents");
       stripeBody = String(init?.body ?? "");
       return Response.json({ id: "pi_mpp_hi_new", status: "succeeded" });
@@ -179,6 +181,7 @@ describe("signup", () => {
           method: "POST",
           headers: {
             authorization,
+            "x-hi-new-claim-token": initialJson.token,
             "content-type": "application/json",
           },
           body: JSON.stringify(body),
@@ -196,13 +199,22 @@ describe("signup", () => {
       expect(paidJson.status).toBe("active");
       expect(paidJson.payment).toBe("mpp");
       expect(paidJson.token).toStartWith("hn_");
-      expect(paidJson.token).not.toBe(initialJson.token);
+      expect(paidJson.token).toBe(initialJson.token);
 
       const me = await call(app, "GET", "/api/handles/me", { token: paidJson.token });
       expect(me.status).toBe(200);
       expect(me.json.paid_until).toBeTruthy();
       const oldToken = await call(app, "GET", "/api/handles/me", { token: initialJson.token });
-      expect(oldToken.status).toBe(401);
+      expect(oldToken.status).toBe(200);
+
+      const retry = await app.request("http://hi.test/api/handles", {
+        method: "POST", headers: { authorization, "content-type": "application/json", "x-hi-new-claim-token": initialJson.token },
+        body: JSON.stringify(body),
+      }, mppEnv);
+      expect(retry.status).toBe(201);
+      expect((await retry.json() as { token: string }).token).toBe(initialJson.token);
+      expect(await db.select().from(payments)).toHaveLength(1);
+      expect(stripeCalls).toBe(1);
 
       const [handle] = await db.select().from(handles).where(eq(handles.name, "vlad"));
       expect(handle!.status).toBe("active");

@@ -11,7 +11,7 @@ type ApiRequest = {
   headers?: Record<string, string>;
 };
 
-type ApiCall = (request: ApiRequest) => Promise<Response>;
+type ApiCall = (request: ApiRequest, context: Context<AppEnv>) => Promise<Response>;
 
 type Tool = Readonly<{
   name: string;
@@ -425,10 +425,15 @@ async function runTool(
   auth: string | undefined,
   name: string,
   raw: unknown,
+  context: Context<AppEnv>,
 ) {
   const args = asObject(raw);
   const tool = toolsByName.get(name);
   if (!tool) return { status: 404, value: { error: "unknown_tool" } };
+  const properties = tool.inputSchema.properties as Record<string, unknown>;
+  if (Object.keys(args).some((key) => !(key in properties))) {
+    return { status: 400, value: { error: "unknown_argument" } };
+  }
   const request = tool.request(args);
   const response = await callApi({
     origin,
@@ -437,7 +442,7 @@ async function runTool(
     path: request.path,
     body: request.body,
     headers: request.headers,
-  });
+  }, context);
   const value = await response
     .json()
     .catch(() => ({ error: "invalid_api_response" }));
@@ -633,6 +638,7 @@ export function createMcpRoutes(callApi: ApiCall) {
           c.req.header("authorization"),
           name,
           params.arguments,
+          c,
         );
         return c.json({
           jsonrpc: "2.0",

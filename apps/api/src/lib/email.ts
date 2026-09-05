@@ -3,13 +3,15 @@ export type SendEmail = (msg: {
   to: string;
   subject: string;
   text: string;
+  idempotencyKey?: string;
 }) => Promise<void>;
 
 export const EMAIL_FROM = "hi.new <verify@mail.hi.new>";
 
-export function resendSender(apiKey: string | undefined): SendEmail {
+export function resendSender(apiKey: string | undefined, opts: { logLocalMail?: boolean } = {}): SendEmail {
   return async (msg) => {
     if (!apiKey) {
+      if (!opts.logLocalMail) throw new Error("Email delivery is not configured");
       // Local dev: no Resend key, so the mail lands in the wrangler console.
       // Magic links (verify, recover, owner sign-in) are clickable from here.
       const links = msg.text.match(/https?:\/\/\S+/g) ?? [];
@@ -29,11 +31,12 @@ export function resendSender(apiKey: string | undefined): SendEmail {
       headers: {
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
+        ...(msg.idempotencyKey ? { "Idempotency-Key": msg.idempotencyKey } : {}),
       },
       body: JSON.stringify({ from: EMAIL_FROM, to: msg.to, subject: msg.subject, text: msg.text }),
     });
     if (!res.ok) {
-      console.error("resend send failed", res.status, await res.text().catch(() => ""));
+      throw new Error(`Email delivery failed (${res.status})`);
     }
   };
 }

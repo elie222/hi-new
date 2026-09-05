@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { checkName, HOUSE_NAME } from "@hi-new/domain";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
@@ -28,6 +28,7 @@ import { createOwnerAuth, OWNER_SESSION_COOKIES, type OwnerAuth } from "./lib/ow
 import { stripeRoutes } from "./routes/stripe";
 import { apiMd, cliPrefix, skillMd } from "./skill";
 import { createMcpRoutes } from "./mcp";
+import { sha256Hex } from "./lib/tokens";
 
 async function findInvite(db: Db, token: string) {
   const [row] = await db
@@ -40,7 +41,7 @@ async function findInvite(db: Db, token: string) {
     })
     .from(invites)
     .innerJoin(handles, eq(invites.creatorId, handles.id))
-    .where(eq(invites.token, token))
+    .where(or(eq(invites.token, await sha256Hex(token)), token.startsWith("hni_") ? eq(invites.token, token) : undefined))
     .limit(1);
   return row;
 }
@@ -142,12 +143,14 @@ export function createApp(overrides?: {
 
   app.use("*", async (c, next) => {
     c.set("db", overrides?.db ?? getDb(c.env.DATABASE_URL));
-    c.set("sendEmail", overrides?.sendEmail ?? resendSender(c.env?.RESEND_API_KEY));
+    const origin = c.env?.APP_ORIGIN || new URL(c.req.url).origin;
+    const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    c.set("sendEmail", overrides?.sendEmail ?? resendSender(c.env?.RESEND_API_KEY, { logLocalMail: local }));
     c.set(
       "notificationEncryptionKey",
       overrides?.notificationEncryptionKey ?? c.env?.NOTIFICATION_ENCRYPTION_KEY,
     );
-    c.set("origin", c.env?.APP_ORIGIN || new URL(c.req.url).origin);
+    c.set("origin", origin);
     c.set("ownerSignedIn", OWNER_SESSION_COOKIES.some((name) => Boolean(getCookie(c, name))));
     c.set(
       "ownerAuth",
@@ -189,17 +192,19 @@ export function createApp(overrides?: {
 
   app.route(
     "/",
-    createMcpRoutes(async ({ origin, authorization, method, path, body, headers: requestHeaders }) => {
+    createMcpRoutes(async ({ origin, authorization, method, path, body, headers: requestHeaders }, context) => {
       const headers: Record<string, string> = {
         "content-type": "application/json",
         ...requestHeaders,
       };
       if (authorization) headers.authorization = authorization;
+      let executionCtx;
+      try { executionCtx = context.executionCtx; } catch { /* Local requests have no execution context. */ }
       return app.request(`${origin}${path}`, {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
-      });
+      }, context.env, executionCtx);
     }),
   );
   app.route("/", stripeRoutes);
@@ -260,7 +265,7 @@ export function createApp(overrides?: {
       .from(groupInvites)
       .innerJoin(groups, eq(groupInvites.groupId, groups.id))
       .innerJoin(handles, eq(groupInvites.creatorId, handles.id))
-      .where(eq(groupInvites.token, token))
+      .where(or(eq(groupInvites.token, await sha256Hex(token)), token.startsWith("hngi_") ? eq(groupInvites.token, token) : undefined))
       .limit(1);
     const joined = c.req.query("joined") ?? null;
     const valid = row && !row.redeemedAt && row.expiresAt.getTime() > Date.now();

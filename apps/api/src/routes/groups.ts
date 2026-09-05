@@ -5,7 +5,7 @@ import { groupMembers, groups, handles, messagePayloads, messages } from "../db/
 import { requireAuth, requireScope } from "../lib/auth";
 import { isFailure, joinGroup } from "../lib/connections";
 import { createGroup, createGroupInvite, groupName } from "../lib/groups";
-import { messageByteLength, queueMessages } from "../lib/messages";
+import { messageByteLength, queueMessages, RecipientKeyChanged } from "../lib/messages";
 import { prepareInboxNotifications } from "../lib/owner-notifications";
 import { RATE, takeRate } from "../lib/ratelimit";
 import { fingerprint } from "../lib/tokens";
@@ -27,7 +27,7 @@ groupRoutes.post("/api/groups", requireAuth, requireScope("groups:write"), async
   const body = await c.req.json<{ name?: unknown }>().catch(() => null);
   const name = groupName(body?.name);
   if (!name) return c.json({ error: "name must be 1-64 printable characters" }, 400);
-  const created = await createGroup(c.get("db"), c.get("me").id, name);
+  const created = await createGroup(c.get("db"), c.get("me").id, name, null, c.get("notificationEncryptionKey"));
   return c.json(
     {
       id: created.publicId,
@@ -72,6 +72,7 @@ groupRoutes.get("/api/groups/:id", requireAuth, requireScope("groups:read"), asy
     .select({
       name: handles.name,
       publicKey: handles.publicKey,
+      pinnedKey: groupMembers.pinnedKey,
       role: groupMembers.role,
       joinedAt: groupMembers.joinedAt,
     })
@@ -83,8 +84,9 @@ groupRoutes.get("/api/groups/:id", requireAuth, requireScope("groups:read"), asy
     rows.map(async (row) => ({
       name: row.name,
       role: row.role,
-      public_key: row.publicKey,
-      fingerprint: row.publicKey ? await fingerprint(row.publicKey) : null,
+      public_key: row.pinnedKey,
+      key_changed: row.publicKey !== row.pinnedKey,
+      fingerprint: row.pinnedKey ? await fingerprint(row.pinnedKey) : null,
       joined_at: row.joinedAt,
     })),
   );
@@ -92,7 +94,7 @@ groupRoutes.get("/api/groups/:id", requireAuth, requireScope("groups:read"), asy
     id: joined.group.publicId,
     name: joined.group.name,
     role: joined.role,
-    e2e_ready: members.every((member) => member.public_key !== null),
+    e2e_ready: members.every((member) => member.public_key !== null && !member.key_changed),
     members,
     note: "For E2E group mail, encrypt one age ciphertext to every other member's public key.",
   });
@@ -106,7 +108,7 @@ groupRoutes.post(
     const joined = await membership(c, c.req.param("id"));
     if (!joined) return c.json({ error: "not_a_group_member" }, 403);
     if (joined.role !== "owner") return c.json({ error: "group_owner_required" }, 403);
-    const invite = await createGroupInvite(c.get("db"), joined.group.id, c.get("me").id);
+    const invite = await createGroupInvite(c.get("db"), joined.group.id, c.get("me").id, null, c.get("notificationEncryptionKey"));
     return c.json(
       {
         invite: {
@@ -120,6 +122,26 @@ groupRoutes.post(
     );
   },
 );
+
+// A separate approval keeps a stolen member token from silently replacing
+// the key other members trusted. The owner must verify the new key first.
+groupRoutes.put("/api/groups/:id/members/:name/key", requireAuth, requireScope("groups:write"), async (c) => {
+  const joined = await membership(c, c.req.param("id"));
+  if (!joined || joined.role !== "owner") return c.json({ error: "group_owner_required" }, 403);
+  const body = await c.req.json<{ public_key?: unknown }>().catch(() => null);
+  if (!body || (body.public_key !== null && typeof body.public_key !== "string")) {
+    return c.json({ error: "public_key must be a string or null" }, 400);
+  }
+  return c.get("db").transaction(async (tx) => {
+    const [target] = await tx.select().from(handles).where(eq(handles.name, c.req.param("name").toLowerCase())).for("update");
+    if (!target) return c.json({ error: "not_found" }, 404);
+    if (target.publicKey !== body.public_key) return c.json({ error: "member_key_changed" }, 409);
+    const updated = await tx.update(groupMembers).set({ pinnedKey: target.publicKey })
+      .where(and(eq(groupMembers.groupId, joined.group.id), eq(groupMembers.handleId, target.id)))
+      .returning({ id: groupMembers.id });
+    return updated.length ? c.json({ verified: true }) : c.json({ error: "not_a_group_member" }, 404);
+  });
+});
 
 groupRoutes.post(
   "/api/group-invites/:token/redeem",
@@ -158,6 +180,7 @@ groupRoutes.post(
         id: handles.id,
         name: handles.name,
         publicKey: handles.publicKey,
+        pinnedKey: groupMembers.pinnedKey,
         webhookUrl: handles.webhookUrl,
         email: handles.email,
         emailVerifiedAt: handles.emailVerifiedAt,
@@ -168,6 +191,8 @@ groupRoutes.post(
       .innerJoin(handles, eq(groupMembers.handleId, handles.id))
       .where(and(eq(groupMembers.groupId, joined.group.id), ne(groupMembers.handleId, c.get("me").id)));
     if (recipients.length === 0) return c.json({ error: "no_other_members" }, 409);
+    const changedKeys = recipients.filter(recipient => recipient.publicKey !== recipient.pinnedKey).map(recipient => recipient.name);
+    if (changedKeys.length) return c.json({ error: "member_key_changed", members: changedKeys }, 409);
     const missingKeys = recipients.filter((recipient) => !recipient.publicKey).map((recipient) => recipient.name);
     const keyed = recipients.filter((recipient) => recipient.publicKey).map((recipient) => recipient.name);
     if (messageEnc === "age" && missingKeys.length > 0) {
@@ -182,7 +207,10 @@ groupRoutes.post(
     }
     const expiresAt = new Date(Date.now() + MESSAGE_TTL_MS);
     const notifications = await prepareInboxNotifications(c, recipients);
-    const inserted = await queueMessages(
+    const dispatchId = crypto.randomUUID();
+    let inserted: Awaited<ReturnType<typeof queueMessages>>;
+    try {
+    inserted = await queueMessages(
       c.get("db"),
       recipients.map((recipient) => ({
           fromId: c.get("me").id,
@@ -194,6 +222,8 @@ groupRoutes.post(
           groupId: joined.group.id,
           groupPublicId: joined.group.publicId,
           groupName: joined.group.name,
+          dispatchId,
+          expectedRecipientKey: recipient.pinnedKey,
           expiresAt,
           reportUnread: notifications.tracks(recipient.id),
           transcriptOwners: [
@@ -208,6 +238,10 @@ groupRoutes.post(
           ],
         })),
     );
+    } catch (error) {
+      if (error instanceof RecipientKeyChanged) return c.json({ error: "member_key_changed" }, 409);
+      throw error;
+    }
     notifications.dispatch(
       new Map(inserted.map((state) => [state.toId, state])),
     );

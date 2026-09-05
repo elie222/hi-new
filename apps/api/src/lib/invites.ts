@@ -2,7 +2,7 @@ import { INVITE_TTL_MS } from "../context";
 import type { Db } from "../db/client";
 import { invites } from "../db/schema";
 import { RATE, takeRate } from "./ratelimit";
-import { randomToken } from "./tokens";
+import { randomToken, sha256Hex } from "./tokens";
 
 export type CreatedInvite = { url: string; token: string; expiresAt: Date };
 
@@ -29,6 +29,6 @@ export async function createInvite(
   if (!(await takeRate(db, handleId, kind, limit, windowSeconds))) return null;
   const token = randomToken("hni");
   const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
-  await db.insert(invites).values({ token, creatorId: handleId, expiresAt, message, label });
+  await db.insert(invites).values({ token: await sha256Hex(token), creatorId: handleId, expiresAt, message, label });
   return { url: `${origin}/i/${token}`, token, expiresAt };
 }

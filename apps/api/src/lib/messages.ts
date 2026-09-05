@@ -18,6 +18,8 @@ export type QueuedMessage = {
   groupId?: number | null;
   groupPublicId?: string | null;
   groupName?: string | null;
+  dispatchId?: string | null;
+  expectedRecipientKey?: string | null;
   expiresAt: Date;
   transcriptOwners?: readonly TranscriptOwner[];
   bodyBytes?: number;
@@ -142,6 +144,16 @@ export function inboxMessageJson(row: InboxWireRow) {
 export async function queueMessages(db: Db, pending: readonly QueuedMessage[]) {
   if (pending.length === 0) return [];
   return db.transaction(async (tx) => {
+    const boundRecipients = pending.filter((message) => message.expectedRecipientKey !== undefined);
+    if (boundRecipients.length) {
+      const locked = await tx.select({ id: handles.id, publicKey: handles.publicKey }).from(handles)
+        .where(inArray(handles.id, [...new Set(boundRecipients.map(message => message.toId))]))
+        .orderBy(asc(handles.id)).for("update");
+      const keys = new Map(locked.map(handle => [handle.id, handle.publicKey]));
+      if (boundRecipients.some(message => keys.get(message.toId) !== message.expectedRecipientKey)) {
+        throw new RecipientKeyChanged();
+      }
+    }
     const trackedRecipients = [
       ...new Set(
         pending
@@ -189,6 +201,7 @@ export async function queueMessages(db: Db, pending: readonly QueuedMessage[]) {
           groupId: message.groupId ?? null,
           groupPublicId: message.groupPublicId ?? null,
           groupName: message.groupName ?? null,
+          dispatchId: message.dispatchId ?? null,
           expiresAt: message.expiresAt,
           idempotencyKey: message.idempotencyKey ?? null,
           idempotencyHash: message.idempotencyHash ?? null,
@@ -237,6 +250,10 @@ export async function queueMessages(db: Db, pending: readonly QueuedMessage[]) {
       };
     });
   });
+}
+
+export class RecipientKeyChanged extends Error {
+  constructor() { super("recipient_key_changed"); }
 }
 
 export async function queueMessage(db: Db, pending: QueuedMessage) {
