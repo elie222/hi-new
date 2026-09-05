@@ -1,12 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { unique } from "./helpers";
+import { signIn, unique } from "./helpers";
 
 test("blocked storage prevents a remote claim", async ({ page }) => {
+  await signIn(page, `${unique("storage-owner")}@example.com`);
   await page.addInitScript(() => {
     Storage.prototype.setItem = () => { throw new DOMException("Blocked", "SecurityError"); };
   });
   let claims = 0;
-  await page.route("**/api/handles", (route) => { claims++; return route.abort(); });
+  await page.route("**/api/owner/claims", (route) => { claims++; return route.abort(); });
   await page.goto("/");
   await page.getByPlaceholder("yourname").fill(unique("storage"));
   await page.getByRole("button", { name: "Claim", exact: true }).click();
@@ -16,6 +17,7 @@ test("blocked storage prevents a remote claim", async ({ page }) => {
 
 test("claim persistence failure preserves the token and displays recovery", async ({ page }) => {
   const name = unique("storage-recovery");
+  await signIn(page, `${unique("storage-owner")}@example.com`);
   await page.addInitScript(() => {
     const original = Storage.prototype.setItem;
     let writes = 0;

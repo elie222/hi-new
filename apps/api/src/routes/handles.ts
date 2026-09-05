@@ -110,7 +110,17 @@ function nextSteps(origin: string, hasKey: boolean): string[] {
   ];
 }
 
-handleRoutes.post("/api/handles", async (c) => {
+handleRoutes.on("POST", ["/api/handles", "/api/owner/claims"], async (c) => {
+  const ownerClaim = c.req.path === "/api/owner/claims";
+  if (ownerClaim) {
+    c.header("Cache-Control", "private, no-store");
+    const origin = c.req.header("origin");
+    const site = c.req.header("sec-fetch-site");
+    if ((site && site !== "same-origin" && site !== "none") ||
+        (origin && origin !== c.get("origin") && origin !== new URL(c.req.url).origin)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+  }
   // mppx needs the untouched Request so the Payment credential and request
   // transport are available after Hono consumes the JSON body.
   const paymentRequest = c.req.raw.clone();
@@ -121,7 +131,14 @@ handleRoutes.post("/api/handles", async (c) => {
   if (!nameCheck.ok) return c.json({ error: nameCheck.error }, 400);
   let email: string | null = null;
   let emailVerifiedAt: Date | null = null;
-  if (body.email != null && body.email !== "") {
+  if (ownerClaim) {
+    const session = await c.get("ownerAuth").api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user.email || !session.user.emailVerified) {
+      return c.json({ error: "sign_in_required", hint: "Sign in to claim your name." }, 401);
+    }
+    email = session.user.email.toLowerCase();
+    emailVerifiedAt = new Date();
+  } else if (body.email != null && body.email !== "") {
     if (!isEmail(body.email)) return c.json({ error: "invalid_email" }, 400);
     email = body.email.toLowerCase();
   } else if (c.get("ownerSignedIn")) {
@@ -156,15 +173,27 @@ handleRoutes.post("/api/handles", async (c) => {
   const origin = c.get("origin");
   const paid = priceCents > 0;
   const paymentCredential = hasMppCredential(paymentRequest);
+  const claimToken = c.req.header("x-hi-new-claim-token")?.trim();
+
+  const [existing] = await db.select().from(handles).where(eq(handles.name, name)).limit(1);
+  const alreadyOwned = ownerClaim && existing?.email === email;
+  const existingTokenMatches = existing && claimToken
+    ? await sha256Hex(claimToken) === existing.bearerHash
+    : false;
+  if (alreadyOwned && !existingTokenMatches) {
+    return c.json({ name, owner_url: existing.status === "active" ? "/owner" : `/buy/${name}` });
+  }
 
   // Sybil brake: a single email can hold a limited number of free names.
-  if (email && priceCents === 0 && !(await emailHasRoom(db, email))) {
+  if (email && priceCents === 0 && !alreadyOwned && !(await emailHasRoom(db, email))) {
     return c.json(
       {
         error: "email_name_limit",
         limit: MAX_FREE_HANDLES_PER_EMAIL,
-        claim_without_email: true,
-        hint: `This email already holds ${MAX_FREE_HANDLES_PER_EMAIL} free names. Use another email, or omit email to claim now and attach one within 7 days. Paid names are unlimited.`,
+        claim_without_email: !ownerClaim,
+        hint: ownerClaim
+          ? `This account already holds ${MAX_FREE_HANDLES_PER_EMAIL} free names. Paid names are unlimited.`
+          : `This email already holds ${MAX_FREE_HANDLES_PER_EMAIL} free names. Use another email, or omit email to claim now and attach one within 7 days. Paid names are unlimited.`,
       },
       409,
     );
@@ -192,7 +221,6 @@ handleRoutes.post("/api/handles", async (c) => {
     }),
   );
 
-  const [existing] = await db.select().from(handles).where(eq(handles.name, name)).limit(1);
   let token: string | undefined;
   let bearerHash: string;
   let handleId: number;
@@ -210,8 +238,7 @@ handleRoutes.post("/api/handles", async (c) => {
 
     bearerHash = existing.bearerHash;
     handleId = existing.id;
-    const claimToken = c.req.header("x-hi-new-claim-token")?.trim();
-    if (!claimToken || (await sha256Hex(claimToken)) !== bearerHash) {
+    if (!existingTokenMatches) {
       return c.json({ error: "name_taken" }, 409);
     }
     token = claimToken;
@@ -231,7 +258,7 @@ handleRoutes.post("/api/handles", async (c) => {
     if (paymentCredential) {
       return c.json({ error: "payment_claim_expired", hint: "Start the Link MPP payment again." }, 409);
     }
-    const suppliedToken = c.req.header("x-hi-new-claim-token")?.trim();
+    const suppliedToken = claimToken;
     if (suppliedToken && !/^hn_[A-Za-z0-9_-]{43}$/.test(suppliedToken)) {
       return c.json({ error: "invalid_claim_token" }, 400);
     }

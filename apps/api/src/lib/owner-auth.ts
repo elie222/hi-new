@@ -107,12 +107,13 @@ export function createOwnerAuth(opts: { db: Db; origin: string; env: OwnerAuthEn
 
 export type OwnerAuth = ReturnType<typeof createOwnerAuth>;
 
-// A post-sign-in destination other than the dashboard: a profile, or the
-// setup page's email step.
+// Only allow known local destinations and claim context through sign-in.
 export function safeNext(value: unknown): string | null {
+  if (value === "/owner") return null;
+  if (typeof value === "string" && /^\/\?claim=[a-z0-9][a-z0-9-]{1,31}(?:&ref=[a-z0-9][a-z0-9-]{1,31})?(?:&link=hni_[\w-]+&from=[a-z0-9][a-z0-9-]{1,31})?$/.test(value)) return value;
   return typeof value === "string" && /^\/(?:[a-z0-9][a-z0-9-]{1,31}(?:\/setup\?step=email)?|i\/hni_[\w-]+)$/.test(value) ? value : null;
 }
 
 export function magicLinkVerifyUrl(token: string, next: string | null = null): string {
-  return `${OWNER_AUTH_PATH}/magic-link/verify?token=${encodeURIComponent(token)}&callbackURL=${encodeURIComponent(next ?? "/owner")}&errorCallbackURL=${encodeURIComponent("/owner?error=link")}`;
+  return `${OWNER_AUTH_PATH}/magic-link/verify?token=${encodeURIComponent(token)}&callbackURL=${encodeURIComponent(next ?? "/owner")}&errorCallbackURL=${encodeURIComponent(`/owner?error=link${next ? `&next=${encodeURIComponent(next)}` : ""}`)}`;
 }

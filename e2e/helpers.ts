@@ -32,9 +32,9 @@ export async function latestMailTo(request: APIRequestContext, to: string, subje
 }
 
 export function linkIn(text: string, pathPrefix: string): string {
-  const m = text.match(new RegExp(`https?://[^\\s]+(${pathPrefix.replace(/\//g, "\\/")}[\\w-]+)`));
-  if (!m) throw new Error(`no ${pathPrefix} link in mail: ${text}`);
-  return m[1]!;
+  const url = text.match(/https?:\/\/[^\s]+/g)?.map((value) => new URL(value)).find((value) => value.pathname.startsWith(pathPrefix));
+  if (!url) throw new Error(`no ${pathPrefix} URL in mail`);
+  return url.pathname + url.search;
 }
 
 // A bot claimed straight through the API (what a bot does on its own).

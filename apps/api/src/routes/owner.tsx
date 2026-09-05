@@ -416,7 +416,7 @@ ownerRoutes.post("/owner/login", async (c) => {
     // indistinguishable from the outside. Logged for the operator.
     console.warn("owner sign-in: magic link not sent", (err as Error)?.message ?? err);
   }
-  return renderPage(c, <OwnerCheckEmailPage email={typed} />);
+  return renderPage(c, <OwnerCheckEmailPage email={typed} next={next} />);
 });
 
 ownerRoutes.post("/owner/login/:provider", async (c) => {
@@ -428,12 +428,12 @@ ownerRoutes.post("/owner/login/:provider", async (c) => {
   const form = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
   const next = safeNext(form.next);
   const { headers, response } = await c.get("ownerAuth").api.signInSocial({
-    body: { provider, callbackURL: next ?? "/owner", errorCallbackURL: "/owner?error=oauth" },
+    body: { provider, callbackURL: next ?? "/owner", errorCallbackURL: `/owner?error=oauth${next ? `&next=${encodeURIComponent(next)}` : ""}` },
     headers: c.req.raw.headers,
     returnHeaders: true,
   });
   forwardCookies(c, headers);
-  if (!response.url) return c.redirect("/owner?error=oauth", 303);
+  if (!response.url) return c.redirect(`/owner?error=oauth${next ? `&next=${encodeURIComponent(next)}` : ""}`, 303);
   return c.redirect(response.url, 303);
 });
 
@@ -442,13 +442,14 @@ ownerRoutes.post("/owner/login/:provider", async (c) => {
 ownerRoutes.get("/owner/l/:token", async (c) => {
   privatePage(c);
   const token = c.req.param("token");
+  const next = safeNext(c.req.query("next"));
   const [pending] = await c
     .get("db")
     .select({ id: verification.id })
     .from(verification)
     .where(and(or(eq(verification.identifier, await sha256Hex(token)), /^[a-zA-Z]{32}$/.test(token) ? eq(verification.identifier, token) : undefined), gt(verification.expiresAt, new Date())))
     .limit(1);
-  return renderPage(c, <OwnerConfirmPage verifyUrl={pending ? magicLinkVerifyUrl(token, safeNext(c.req.query("next"))) : null} />, pending ? 200 : 410);
+  return renderPage(c, <OwnerConfirmPage next={next} verifyUrl={pending ? magicLinkVerifyUrl(token, next) : null} />, pending ? 200 : 410);
 });
 
 ownerRoutes.post("/owner/logout", async (c) => {
