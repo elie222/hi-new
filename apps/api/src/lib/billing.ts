@@ -2,10 +2,10 @@
 // every paid invoice moves the handle's paid_until to the invoice period end.
 // MPP (agent) payments are one-off and live in ./mpp.ts; both write the same
 // ledger through recordPayment.
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import Stripe from "stripe";
 import type { Db } from "../db/client";
-import { handles, type Handle } from "../db/schema";
+import { handles, stripeSubscriptionStates, type Handle } from "../db/schema";
 import { recordPayment, type RecordedPayment } from "./payments";
 
 export function stripeClient(key: string): Stripe {
@@ -26,49 +26,107 @@ type SubscriptionCheckout = {
 };
 
 export async function createSubscriptionCheckout(
+  db: Db,
   stripe: Stripe,
   opts: SubscriptionCheckout,
 ): Promise<string> {
+  // Persist the retry key before calling Stripe. A network failure after Stripe
+  // creates the session must not permit a second billable subscription.
+  await db
+    .update(handles)
+    .set({ stripeCheckoutKey: `${Date.now()}:${crypto.randomUUID()}` })
+    .where(and(eq(handles.id, opts.handle.id), isNull(handles.stripeCheckoutKey)));
+  const result = await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(handles)
+      .where(eq(handles.id, opts.handle.id))
+      .for("update");
+    if (!current || current.stripeSubscriptionId)
+      throw new Error("Subscription already active or handle missing");
+    if (current.stripeCheckoutSessionId) {
+      const existing = await stripe.checkout.sessions.retrieve(current.stripeCheckoutSessionId);
+      if (existing.status === "expired") {
+        await tx
+          .update(handles)
+          .set({ stripeCheckoutSessionId: null, stripeCheckoutKey: null })
+          .where(eq(handles.id, current.id));
+        return null;
+      }
+      if (existing.status === "complete") throw new Error("Checkout already completed");
+      if (!existing.url) throw new Error("Stripe Checkout returned no URL");
+      return existing.url;
+    }
+    // Stripe can prune idempotency records after 24h. An unresolved attempt
+    // older than that needs reconciliation, never a blind second checkout.
+    const startedAt = Number(current.stripeCheckoutKey?.split(":")[0]);
+    if (!Number.isFinite(startedAt) || Date.now() - startedAt >= 23 * 3600 * 1000) {
+      throw new Error("Checkout outcome requires reconciliation");
+    }
+    const session = await newSubscriptionCheckout(
+      stripe,
+      { ...opts, handle: current },
+      current.stripeCheckoutKey!,
+    );
+    await tx
+      .update(handles)
+      .set({ stripeCheckoutSessionId: session.id })
+      .where(eq(handles.id, current.id));
+    return session.url!;
+  });
+  return result ?? createSubscriptionCheckout(db, stripe, opts);
+}
+
+async function newSubscriptionCheckout(
+  stripe: Stripe,
+  opts: SubscriptionCheckout,
+  retryKey: string,
+) {
   const { handle, priceCents } = opts;
   const trialEnd =
-    opts.startAtPaidUntil && handle.paidUntil && handle.paidUntil.getTime() - Date.now() > MIN_TRIAL_LEAD_MS
+    opts.startAtPaidUntil &&
+    handle.paidUntil &&
+    handle.paidUntil.getTime() - Date.now() > MIN_TRIAL_LEAD_MS
       ? Math.floor(handle.paidUntil.getTime() / 1000)
       : undefined;
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          unit_amount: priceCents,
-          recurring: { interval: "year" },
-          product_data: {
-            name: `hi.new/${handle.name}`,
-            description: `${handle.name.length}-letter hi.new handle, billed yearly`,
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: "subscription",
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            unit_amount: priceCents,
+            recurring: { interval: "year" },
+            product_data: {
+              name: `hi.new/${handle.name}`,
+              description: `${handle.name.length}-letter hi.new handle, billed yearly`,
+            },
           },
+          quantity: 1,
         },
-        quantity: 1,
-      },
-    ],
-    // Promoters get a 100% code; with nothing due Stripe skips the card form.
-    allow_promotion_codes: true,
-    payment_method_collection: trialEnd ? "always" : "if_required",
-    ...(handle.stripeCustomerId
-      ? { customer: handle.stripeCustomerId }
-      : handle.email
-        ? { customer_email: handle.email }
-        : {}),
-    client_reference_id: String(handle.id),
-    metadata: { hi_new_name: handle.name, hi_new_handle_id: String(handle.id) },
-    subscription_data: {
+      ],
+      // Promoters get a 100% code; with nothing due Stripe skips the card form.
+      allow_promotion_codes: true,
+      payment_method_collection: trialEnd ? "always" : "if_required",
+      ...(handle.stripeCustomerId
+        ? { customer: handle.stripeCustomerId }
+        : handle.email
+          ? { customer_email: handle.email }
+          : {}),
+      client_reference_id: String(handle.id),
       metadata: { hi_new_name: handle.name, hi_new_handle_id: String(handle.id) },
-      ...(trialEnd ? { trial_end: trialEnd } : {}),
+      subscription_data: {
+        metadata: { hi_new_name: handle.name, hi_new_handle_id: String(handle.id) },
+        ...(trialEnd ? { trial_end: trialEnd } : {}),
+      },
+      success_url: opts.successUrl,
+      cancel_url: opts.cancelUrl,
     },
-    success_url: opts.successUrl,
-    cancel_url: opts.cancelUrl,
-  });
+    { idempotencyKey: `hi-new-checkout:${handle.id}:${retryKey}` },
+  );
   if (!session.url) throw new Error("Stripe Checkout returned no URL");
-  return session.url;
+  return session;
 }
 
 export async function createBillingPortal(
@@ -95,7 +153,10 @@ export function invoicePeriodEnd(invoice: Stripe.Invoice): Date {
   return new Date(end * 1000);
 }
 
-function invoiceSubscription(invoice: Stripe.Invoice): { id: string | null; metadata: Stripe.Metadata | null } {
+function invoiceSubscription(invoice: Stripe.Invoice): {
+  id: string | null;
+  metadata: Stripe.Metadata | null;
+} {
   const details = invoice.parent?.subscription_details;
   return { id: idOf(details?.subscription), metadata: details?.metadata ?? null };
 }
@@ -107,8 +168,9 @@ async function findHandle(
   const id = Number(hint.handleId);
   if (Number.isSafeInteger(id) && id > 0) {
     const [row] = await db.select().from(handles).where(eq(handles.id, id)).limit(1);
-    if (row && (!hint.name || row.name === hint.name)) return row;
+    return row && (!hint.name || row.name === hint.name) ? row : null;
   }
+  if (hint.handleId) return null;
   if (hint.subscriptionId) {
     const [row] = await db
       .select()
@@ -116,10 +178,6 @@ async function findHandle(
       .where(eq(handles.stripeSubscriptionId, hint.subscriptionId))
       .limit(1);
     if (row) return row;
-  }
-  if (hint.name) {
-    const [row] = await db.select().from(handles).where(eq(handles.name, hint.name)).limit(1);
-    return row ?? null;
   }
   return null;
 }
@@ -131,6 +189,20 @@ export type AppliedEvent =
 
 // Idempotent: Stripe retries, and the ledger dedupes on the invoice id.
 export async function applyStripeEvent(db: Db, event: Stripe.Event): Promise<AppliedEvent> {
+  return db.transaction(async (tx) => applyLockedStripeEvent(tx as unknown as Db, event));
+}
+
+async function applyLockedStripeEvent(db: Db, event: Stripe.Event): Promise<AppliedEvent> {
+  if (event.type === "checkout.session.expired") {
+    const session = event.data.object;
+    await db
+      .update(handles)
+      .set({ stripeCheckoutSessionId: null, stripeCheckoutKey: null })
+      .where(
+        and(eq(handles.stripeCheckoutSessionId, session.id), isNull(handles.stripeSubscriptionId)),
+      );
+    return { kind: "ignored" };
+  }
   if (event.type === "invoice.paid") {
     const invoice = event.data.object;
     if (!invoice.id) return { kind: "ignored" };
@@ -141,6 +213,26 @@ export async function applyStripeEvent(db: Db, event: Stripe.Event): Promise<App
       subscriptionId: sub.id,
     });
     if (!handle) return { kind: "ignored" };
+    const [latest] = await db
+      .select()
+      .from(handles)
+      .where(eq(handles.id, handle.id))
+      .for("update");
+    if (sub.id) {
+      await db
+        .insert(stripeSubscriptionStates)
+        .values({ id: sub.id, handleId: handle.id })
+        .onConflictDoNothing();
+    }
+    const [state] = sub.id
+      ? await db
+          .select()
+          .from(stripeSubscriptionStates)
+          .where(eq(stripeSubscriptionStates.id, sub.id))
+      : [];
+    if (state && state.handleId !== handle.id) return { kind: "ignored" };
+    if (latest?.stripeSubscriptionId && latest.stripeSubscriptionId !== sub.id)
+      return { kind: "ignored" };
     const result = await recordPayment(db, {
       reference: invoice.id,
       source: "invoice",
@@ -149,7 +241,7 @@ export async function applyStripeEvent(db: Db, event: Stripe.Event): Promise<App
       amountCents: invoice.amount_paid ?? 0,
       paidUntil: invoicePeriodEnd(invoice),
       stripeCustomerId: idOf(invoice.customer),
-      stripeSubscriptionId: sub.id,
+      ...(state?.endedAt ? {} : { stripeSubscriptionId: sub.id }),
     });
     return { kind: "invoice", name: handle.name, result };
   }
@@ -161,10 +253,50 @@ export async function applyStripeEvent(db: Db, event: Stripe.Event): Promise<App
       name: subscription.metadata?.hi_new_name,
       subscriptionId: subscription.id,
     });
-    if (!handle || handle.stripeSubscriptionId !== subscription.id) return { kind: "ignored" };
+    if (!handle) return { kind: "ignored" };
+    const [latest] = await db
+      .select()
+      .from(handles)
+      .where(eq(handles.id, handle.id))
+      .for("update");
+    await db
+      .insert(stripeSubscriptionStates)
+      .values({ id: subscription.id, handleId: handle.id, endedAt: new Date() })
+      .onConflictDoUpdate({ target: stripeSubscriptionStates.id, set: { endedAt: new Date() } });
+    if (latest?.stripeSubscriptionId !== subscription.id) return { kind: "ignored" };
     // paid_until stays; the name lapses through the grace period on its own.
-    await db.update(handles).set({ stripeSubscriptionId: null }).where(eq(handles.id, handle.id));
+    await db
+      .update(handles)
+      .set({ stripeSubscriptionId: null, stripeCheckoutKey: null, stripeCheckoutSessionId: null })
+      .where(eq(handles.id, handle.id));
     return { kind: "subscription_ended", name: handle.name };
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    const subscriptionId = idOf(session.subscription);
+    if (!subscriptionId) return { kind: "ignored" };
+    const handle = await findHandle(db, {
+      handleId: session.metadata?.hi_new_handle_id,
+      name: session.metadata?.hi_new_name,
+    });
+    if (!handle) return { kind: "ignored" };
+    const [latest] = await db.select().from(handles).where(eq(handles.id, handle.id)).for("update");
+    if (latest?.stripeSubscriptionId && latest.stripeSubscriptionId !== subscriptionId)
+      return { kind: "ignored" };
+    await db
+      .insert(stripeSubscriptionStates)
+      .values({ id: subscriptionId, handleId: handle.id })
+      .onConflictDoNothing();
+    const [state] = await db
+      .select()
+      .from(stripeSubscriptionStates)
+      .where(eq(stripeSubscriptionStates.id, subscriptionId));
+    if (state?.endedAt || state?.handleId !== handle.id) return { kind: "ignored" };
+    await db
+      .update(handles)
+      .set({ stripeSubscriptionId: subscriptionId, stripeCustomerId: idOf(session.customer) })
+      .where(eq(handles.id, handle.id));
   }
 
   return { kind: "ignored" };

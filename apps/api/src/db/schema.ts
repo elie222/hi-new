@@ -31,6 +31,8 @@ export const handles = pgTable("handles", {
   // MPP-paid names have neither and lapse unless paid again.
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  stripeCheckoutKey: text("stripe_checkout_key"),
   // Renewal reminders already sent for the current paid period (0, 30, 7).
   // Reset whenever paid_until moves forward.
   renewalNoticeStage: integer("renewal_notice_stage").notNull().default(0),
@@ -145,6 +147,13 @@ export const grants = pgTable(
   (t) => [uniqueIndex("grants_pair_idx").on(t.handleId, t.peerId)],
 );
 
+// Kept after handle deletion so delayed billing events cannot revive a subscription.
+export const stripeSubscriptionStates = pgTable("stripe_subscription_states", {
+  id: text("id").primaryKey(),
+  handleId: bigint("handle_id", { mode: "number" }).notNull(),
+  endedAt: ts("ended_at"),
+});
+
 export const groups = pgTable("groups", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   publicId: text("public_id").notNull().unique(),
@@ -166,6 +175,7 @@ export const groupMembers = pgTable(
       .notNull()
       .references(() => handles.id, { onDelete: "cascade" }),
     role: text("role", { enum: ["owner", "member"] }).notNull().default("member"),
+    pinnedKey: text("pinned_key"),
     joinedAt: ts("joined_at").notNull().defaultNow(),
   },
   (t) => [
@@ -179,6 +189,8 @@ export const groupInvites = pgTable(
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
     token: text("token").notNull().unique(),
+    // Optional server-encrypted copy lets the owner reshare the reusable link.
+    tokenEnc: text("token_enc"),
     groupId: bigint("group_id", { mode: "number" })
       .notNull()
       .references(() => groups.id, { onDelete: "cascade" }),
@@ -214,6 +226,7 @@ export const messages = pgTable(
     }),
     groupPublicId: text("group_public_id"),
     groupName: text("group_name"),
+    dispatchId: text("dispatch_id"),
     createdAt: ts("created_at").notNull().defaultNow(),
     expiresAt: ts("expires_at").notNull(),
     openedAt: ts("opened_at"),

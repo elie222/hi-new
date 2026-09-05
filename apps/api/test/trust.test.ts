@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { handles, invites, rateCounters } from "../src/db/schema";
+import { sha256Hex } from "../src/lib/tokens";
 import { call, connect, makeTestApp, signup, peers, realMail } from "./helpers";
 
 describe("invites and grants", () => {
@@ -138,7 +139,7 @@ describe("invites and grants", () => {
     await db
       .update(invites)
       .set({ expiresAt: new Date(Date.now() - 1000) })
-      .where(eq(invites.token, invite.json.token));
+      .where(eq(invites.token, await sha256Hex(invite.json.token)));
 
     const expired = await call(app, "POST", `/api/invites/${invite.json.token}/redeem`, {
       token: bob.token,

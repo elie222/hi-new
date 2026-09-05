@@ -3,6 +3,7 @@ import { Decrypter, Encrypter, armor, generateIdentity, identityToRecipient } fr
 import { eq } from "drizzle-orm";
 import { groupInvites, groupMembers, groups, handles, rateCounters } from "../src/db/schema";
 import { call, makeTestApp, signup } from "./helpers";
+import { sha256Hex } from "../src/lib/tokens";
 
 describe("groups", () => {
   test("single ciphertext fans out and decrypts for every keyed member", async () => {
@@ -77,8 +78,20 @@ describe("groups", () => {
       token: owner.token,
       body: { body: "now private", enc: "none" },
     });
-    expect(blocked.status).toBe(400);
+    expect(blocked.status).toBe(409);
+    expect(blocked.json.error).toBe("member_key_changed");
     expect(blocked.json.members).toEqual(["member-bot"]);
+    const roster = await call(app, "GET", `/api/groups/${created.json.id}`, { token: owner.token });
+    expect(roster.json.members.find((entry: any) => entry.name === member.name)).toMatchObject({ public_key: null, key_changed: true });
+    expect((await call(app, "PUT", `/api/groups/${created.json.id}/members/${member.name}/key`, {
+      token: member.token, body: { public_key: "age1membermembermember" },
+    })).status).toBe(403);
+    expect((await call(app, "PUT", `/api/groups/${created.json.id}/members/${member.name}/key`, {
+      token: owner.token, body: { public_key: "age1membermembermember" },
+    })).status).toBe(200);
+    expect((await call(app, "POST", `/api/groups/${created.json.id}/messages`, {
+      token: owner.token, body: { body: "plaintext remains prohibited", enc: "none" },
+    })).status).toBe(400);
   });
 
   test("owner controls membership and members can leave", async () => {
@@ -339,7 +352,7 @@ describe("groups", () => {
     await db
       .update(groupInvites)
       .set({ expiresAt: new Date(Date.now() - 1000) })
-      .where(eq(groupInvites.token, expiredInvite.json.invite.token));
+      .where(eq(groupInvites.token, await sha256Hex(expiredInvite.json.invite.token)));
     expect(
       (await call(app, "POST", `/api/group-invites/${expiredInvite.json.invite.token}/redeem`, {
         token: owner.token,

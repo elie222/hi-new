@@ -36,7 +36,7 @@ stripeRoutes.post("/buy/:name/checkout", async (c) => {
   }
 
   const origin = c.get("origin");
-  const url = await createSubscriptionCheckout(stripeClient(key), {
+  const url = await createSubscriptionCheckout(db, stripeClient(key), {
     handle,
     priceCents,
     // Back to the setup page, which shows the token if this tab did the

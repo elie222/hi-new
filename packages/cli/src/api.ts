@@ -75,8 +75,8 @@ export class Api {
     return json;
   }
 
-  claim(body: { name: string; public_key?: string; email?: string }): Promise<Json> {
-    return this.request("POST", "/api/handles", { body, auth: false });
+  claim(body: { name: string; public_key?: string; email?: string }, token: string): Promise<Json> {
+    return this.request("POST", "/api/handles", { body, auth: false, headers: { "x-hi-new-claim-token": token } });
   }
 
   setup(code: string): Promise<Json> {
@@ -103,9 +103,9 @@ export class Api {
     return this.request("POST", "/api/inbox/ack", { body: { ids } });
   }
 
-  dm(name: string, body: string, enc: "age" | "none", idempotencyKey: string): Promise<Json> {
+  dm(name: string, body: string, enc: "age" | "none", idempotencyKey: string, recipientKey: string | null): Promise<Json> {
     return this.request("POST", `/api/dm/${encodeURIComponent(name)}`, {
-      body: { body, enc },
+      body: { body, enc, recipient_public_key: recipientKey },
       headers: { "idempotency-key": idempotencyKey },
     });
   }

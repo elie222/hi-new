@@ -18,7 +18,8 @@ import {
 import { isEmail, moveEmailText } from "../lib/email";
 import { acknowledgeMessages, messageStatus } from "../lib/messages";
 import { magicLinkVerifyUrl, OWNER_AUTH_PATH, ownerProviders, safeNext } from "../lib/owner-auth";
-import { randomToken } from "../lib/tokens";
+import { randomToken, sha256Hex } from "../lib/tokens";
+import { openSecret } from "../lib/secret-box";
 import { acceptInvite, isFailure, joinGroup } from "../lib/connections";
 import { createGroup, createGroupInvite, groupName } from "../lib/groups";
 import { createInvite, inviteMessageOf } from "../lib/invites";
@@ -63,7 +64,7 @@ function forwardCookies(c: Context<AppEnv>, headers: Headers | undefined): void 
 
 async function ownerEmail(c: Context<AppEnv>): Promise<{ email: string; verified: boolean } | null> {
   const session = await c.get("ownerAuth").api.getSession({ headers: c.req.raw.headers });
-  if (!session?.user.email) return null;
+  if (!session?.user.email || !session.user.emailVerified) return null;
   return { email: session.user.email.toLowerCase(), verified: session.user.emailVerified };
 }
 
@@ -120,7 +121,7 @@ export async function ownedGroups(c: Context<AppEnv>, ownerIds: number[]): Promi
   if (rows.length === 0) return out;
   const activeInvites = await c
     .get("db")
-    .select({ id: groupInvites.id, groupId: groupInvites.groupId, token: groupInvites.token, expiresAt: groupInvites.expiresAt })
+    .select({ id: groupInvites.id, groupId: groupInvites.groupId, token: groupInvites.token, tokenEnc: groupInvites.tokenEnc, expiresAt: groupInvites.expiresAt })
     .from(groupInvites)
     .where(
       and(
@@ -130,12 +131,17 @@ export async function ownedGroups(c: Context<AppEnv>, ownerIds: number[]): Promi
       ),
     )
     .orderBy(desc(groupInvites.id));
-  const inviteByGroup = new Map<number, { id: number; url: string; expiresAt: Date }>();
+  const inviteByGroup = new Map<number, { id: number; url: string | null; expiresAt: Date }>();
+  const encryptionKey = c.get("notificationEncryptionKey");
   for (const invite of activeInvites) {
     if (!inviteByGroup.has(invite.groupId)) {
+      const raw = encryptionKey && invite.tokenEnc
+        ? await openSecret(encryptionKey, `group-invite:${invite.groupId}`, invite.tokenEnc)
+        : null;
+      const valid = raw && /^hngi_[\w-]+$/.test(raw) && await sha256Hex(raw) === invite.token;
       inviteByGroup.set(invite.groupId, {
         id: invite.id,
-        url: `${c.get("origin")}/g/${invite.token}`,
+        url: valid ? `${c.get("origin")}/g/${raw}` : null,
         expiresAt: invite.expiresAt,
       });
     }
@@ -275,6 +281,8 @@ ownerRoutes.get("/owner", async (c) => {
       expiredAt: messages.expiredAt,
       payload: messagePayloads.body,
       groupName: messages.groupName,
+      groupId: messages.groupPublicId,
+      dispatchId: messages.dispatchId,
       tag: messages.tag,
     })
     .from(messages)
@@ -333,6 +341,8 @@ ownerRoutes.get("/owner", async (c) => {
       peer: names.get(peerId) ?? "deleted-handle",
       peerColor: colors.get(peerId) ?? null,
       group: row.groupName,
+      groupId: row.groupId,
+      dispatchId: row.dispatchId,
       enc: row.enc,
       tag: row.tag,
       status: messageStatus({ ...row, openedAt }, now),
@@ -436,7 +446,7 @@ ownerRoutes.get("/owner/l/:token", async (c) => {
     .get("db")
     .select({ id: verification.id })
     .from(verification)
-    .where(and(eq(verification.identifier, token), gt(verification.expiresAt, new Date())))
+    .where(and(or(eq(verification.identifier, await sha256Hex(token)), /^[a-zA-Z]{32}$/.test(token) ? eq(verification.identifier, token) : undefined), gt(verification.expiresAt, new Date())))
     .limit(1);
   return renderPage(c, <OwnerConfirmPage verifyUrl={pending ? magicLinkVerifyUrl(token, safeNext(c.req.query("next"))) : null} />, pending ? 200 : 410);
 });
@@ -546,7 +556,7 @@ ownerRoutes.post("/owner/handles/:id/email", async (c) => {
   await db.insert(emailTokens).values({
     handleId: handle.id,
     kind: "move",
-    token,
+    token: await sha256Hex(token),
     expiresAt: new Date(Date.now() + VERIFY_WINDOW_MS),
   });
   c.get("waitUntil")(c.get("sendEmail")({ to: target, ...moveEmailText(handle.name, `${c.get("origin")}/v/${token}`) }));
@@ -611,7 +621,7 @@ ownerRoutes.post("/owner/handles/:id/auto-renew", async (c) => {
   if (handle.stripeSubscriptionId) return c.redirect("/owner", 303);
   const origin = c.get("origin");
   try {
-    const url = await createSubscriptionCheckout(stripeClient(key), {
+    const url = await createSubscriptionCheckout(c.get("db"), stripeClient(key), {
       handle,
       priceCents,
       startAtPaidUntil: true,
@@ -655,7 +665,7 @@ ownerRoutes.post("/owner/message-link", async (c) => {
   const origin = c.get("origin");
   if (form.kind === "group") {
     const name = groupName(form.group_name) ?? `${from.name} & ${to}`;
-    const created = await createGroup(db, from.id, name, to);
+    const created = await createGroup(db, from.id, name, to, c.get("notificationEncryptionKey"));
     return c.redirect(`${back}?glink=${created.invite.token}&group=${created.publicId}`, 303);
   }
   const message = inviteMessageOf(form.message);
@@ -678,7 +688,7 @@ ownerRoutes.post("/owner/groups/:publicId/invite", async (c) => {
     .where(and(eq(groups.publicId, c.req.param("publicId")), eq(handles.email, email), isNotNull(handles.emailVerifiedAt)))
     .limit(1);
   if (!row) return c.redirect(back, 303);
-  const invite = await createGroupInvite(c.get("db"), row.id, row.ownerId, labelOf(form.label));
+  const invite = await createGroupInvite(c.get("db"), row.id, row.ownerId, labelOf(form.label), c.get("notificationEncryptionKey"));
   return c.redirect(`${back}?glink=${invite.token}&group=${row.publicId}`, 303);
 });
 
@@ -689,7 +699,7 @@ ownerRoutes.post("/owner/handles/:id/groups", async (c) => {
   const form = await c.req.parseBody();
   const name = groupName(form.name);
   if (!name) return c.redirect("/owner?error=group_name", 303);
-  const created = await createGroup(c.get("db"), handle.id, name);
+  const created = await createGroup(c.get("db"), handle.id, name, null, c.get("notificationEncryptionKey"));
   return c.redirect(`/owner?glink=${created.invite.token}&group=${created.publicId}`, 303);
 });
 

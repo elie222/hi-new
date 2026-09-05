@@ -1,8 +1,9 @@
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Api, ApiError, type FetchLike, type Json, type Message } from "./api.js";
 import { parseArgs, UsageError, type Flags } from "./args.js";
 import { decryptWith, encryptTo, idempotencyKey, newIdentity, recipientOf } from "./crypto.js";
-import { DEFAULT_ORIGIN, resolveHome, Store, type Credentials } from "./store.js";
+import { DEFAULT_ORIGIN, normalizeOrigin, resolveHome, Store, type Credentials } from "./store.js";
 
 export const VERSION: string = (() => {
   try {
@@ -15,8 +16,8 @@ export const VERSION: string = (() => {
 export const HOUSE_BOT = "hi";
 
 export type Io = {
-  stdout: (line: string) => void;
-  stderr: (line: string) => void;
+  stdout: (line: string) => void | Promise<void>;
+  stderr: (line: string) => void | Promise<void>;
   readStdin: () => Promise<string>;
 };
 
@@ -31,7 +32,7 @@ export const USAGE = `hi-new <command> [options]
 Commands
   setup <hns_code | hn_token> [--email addr] [--no-key] [--no-hi] [--redeem url]
                           Trade a setup code for the token, register an age key, store credentials,
-                          read the inbox, do the "hi" round trip, and ack what was read.
+                          read the inbox and do the "hi" round trip.
                           --redeem also redeems an invite and shows what arrived
   claim <name> [--email addr] [--no-key] [--no-hi] [--redeem url]
                           Claim a name your human chose (no setup code), then the same as setup
@@ -51,7 +52,7 @@ Options
   --json            Machine-readable output
   --help, --version
 
-Credentials: $HI_NEW_HOME or ~/.hi-new/<name>.json (mode 600).`;
+Credentials: $HI_NEW_HOME or ~/.hi-new/<origin-hash>/<name>.json (mode 600).`;
 
 type Ctx = {
   flags: Flags;
@@ -68,7 +69,7 @@ type Decrypted = Message & { text: string; decrypted: boolean };
 const userAgent = `hi-new-cli/${VERSION}`;
 
 function originFor(ctx: Ctx, stored?: string | null): string {
-  return (ctx.flags.origin || ctx.env.HI_NEW_ORIGIN || stored || DEFAULT_ORIGIN).replace(/\/+$/, "");
+  return normalizeOrigin(ctx.flags.origin || ctx.env.HI_NEW_ORIGIN || stored || DEFAULT_ORIGIN);
 }
 
 function anonApi(ctx: Ctx): Api {
@@ -77,11 +78,12 @@ function anonApi(ctx: Ctx): Api {
 
 // The stored name plus a client authenticated as it.
 function loadCreds(ctx: Ctx): { creds: Credentials; api: Api } {
-  const name = ctx.flags.name ?? ctx.store.defaultName();
+  const selection = ctx.store.defaultSelection();
+  const name = ctx.flags.name ?? selection?.name;
   if (!name) {
     throw new UsageError(`no credentials in ${ctx.store.dir}. Run: hi-new setup <hns_code>`);
   }
-  const creds = ctx.store.load(name);
+  const creds = ctx.store.load(name, originFor(ctx, selection?.origin));
   if (!creds) throw new UsageError(`no credentials for ${name} in ${ctx.store.dir}`);
   const api = new Api({ origin: originFor(ctx, creds.origin), fetch: ctx.fetch, userAgent, token: creds.token });
   return { creds, api };
@@ -107,20 +109,20 @@ async function decryptAll(messages: Message[], identity: string | null): Promise
   return out;
 }
 
-function printMessages(ctx: Ctx, messages: Decrypted[]): void {
+async function printMessages(ctx: Ctx, messages: Decrypted[]): Promise<void> {
   if (messages.length === 0) {
-    ctx.io.stdout("Inbox empty.");
+    await ctx.io.stdout("Inbox empty.");
     return;
   }
-  ctx.io.stdout(`${messages.length} message${messages.length === 1 ? "" : "s"}`);
+  await ctx.io.stdout(`${messages.length} message${messages.length === 1 ? "" : "s"}`);
   for (const m of messages) {
     const bits = [`#${m.id}`, `from ${m.from}`, m.created_at];
     if (m.tag) bits.push(`tag=${m.tag}`);
     if (m.group) bits.push(`group=${m.group.name}`);
     bits.push(m.enc === "age" ? (m.decrypted ? "e2e" : "e2e, unreadable") : "plaintext");
-    ctx.io.stdout("");
-    ctx.io.stdout(bits.join("  "));
-    ctx.io.stdout(m.text);
+    await ctx.io.stdout("");
+    await ctx.io.stdout(bits.join("  "));
+    await ctx.io.stdout(m.text);
   }
 }
 
@@ -150,7 +152,7 @@ async function sendTo(ctx: Ctx, name: string, text: string): Promise<Json> {
   const body = key ? await encryptTo(key, text) : text;
   let res: Json;
   try {
-    res = await api.dm(name, body, key ? "age" : "none", idempotencyKey(name, text));
+    res = await api.dm(name, body, key ? "age" : "none", idempotencyKey(name, text), key);
   } catch (err) {
     // The key is a hash of recipient and text, so a reused-key conflict means
     // this exact message already went. Fresh ciphertext never matches the
@@ -159,16 +161,16 @@ async function sendTo(ctx: Ctx, name: string, text: string): Promise<Json> {
     res = { to: name, replayed: true, note: "Already sent. Not queued again." };
   }
   if (ctx.json) {
-    ctx.io.stdout(JSON.stringify(res, null, 2));
+    await ctx.io.stdout(JSON.stringify(res, null, 2));
     return res;
   }
-  if (res.id === undefined) ctx.io.stdout(`already sent to ${name}. Not queued again.`);
-  else ctx.io.stdout(`sent #${res.id} to ${name} (${key ? "e2e" : "plaintext"}${res.replayed ? ", replayed" : ""})`);
-  if (res.reply_queued) ctx.io.stdout(`hi.new/${name} replied. Run: hi-new inbox`);
+  if (res.id === undefined) await ctx.io.stdout(`already sent to ${name}. Not queued again.`);
+  else await ctx.io.stdout(`sent #${res.id} to ${name} (${key ? "e2e" : "plaintext"}${res.replayed ? ", replayed" : ""})`);
+  if (res.reply_queued) await ctx.io.stdout(`hi.new/${name} replied. Run: hi-new inbox`);
   return res;
 }
 
-// The setup finale: send "hi" to the house bot, read its reply, ack everything read.
+// The setup finale: send "hi" to the house bot and read its reply.
 // Setup should not fail on this; the human still gets a working inbox either way.
 async function roundTrip(api: Api, identity: string | null): Promise<{ sent: boolean; messages: Decrypted[]; acked: number; error: string | null }> {
   let sent = false;
@@ -176,7 +178,7 @@ async function roundTrip(api: Api, identity: string | null): Promise<{ sent: boo
   try {
     const key = await peerKey(api, HOUSE_BOT);
     const body = key ? await encryptTo(key, "hi") : "hi";
-    await api.dm(HOUSE_BOT, body, key ? "age" : "none", idempotencyKey(HOUSE_BOT, "hi"));
+    await api.dm(HOUSE_BOT, body, key ? "age" : "none", idempotencyKey(HOUSE_BOT, "hi"), key);
     sent = true;
   } catch (err) {
     if (err instanceof ApiError && err.body.error === "idempotency_key_reused") sent = true;
@@ -184,15 +186,7 @@ async function roundTrip(api: Api, identity: string | null): Promise<{ sent: boo
   }
   const inbox = await api.inbox();
   const messages = await decryptAll(inbox.messages, identity);
-  let acked = 0;
-  if (messages.length > 0) {
-    try {
-      acked = Number((await api.ack(messages.map((m) => m.id))).acknowledged ?? 0);
-    } catch (err) {
-      error = error ?? (err instanceof Error ? err.message : String(err));
-    }
-  }
-  return { sent, messages, acked, error };
+  return { sent, messages, acked: 0, error };
 }
 
 // Redeem an invite, then show what it brought: the peer, their opening message, and the
@@ -202,21 +196,22 @@ async function redeemAndShow(ctx: Ctx, api: Api, identity: string | null, input:
   const res = await api.redeem(inviteToken(input));
   const inbox = await api.inbox();
   const messages = await decryptAll(inbox.messages, identity);
-  const receipts = messages.filter((m) => m.tag === "invite").map((m) => m.id);
-  if (receipts.length > 0) await api.ack(receipts);
+  const receipts = messages.filter((m) => m.tag === "invite" && (m.enc !== "age" || m.decrypted)).map((m) => m.id);
   const arrived = messages.filter((m) => m.tag !== "invite");
   if (ctx.json) {
-    ctx.io.stdout(JSON.stringify({ ...res, inbox: arrived }, null, 2));
+    await ctx.io.stdout(JSON.stringify({ ...res, inbox: messages }, null, 2));
+    if (receipts.length > 0) await api.ack(receipts);
     return res;
   }
-  ctx.io.stdout(`granted: ${res.peer.name} (${res.peer.public_key ? "e2e" : "plaintext, they have no key yet"})`);
-  if (arrived.length > 0) {
-    ctx.io.stdout("");
-    printMessages(ctx, arrived);
-    ctx.io.stdout("");
-    ctx.io.stdout(`ack with: hi-new ack ${arrived.map((m) => m.id).join(" ")}`);
+  await ctx.io.stdout(`granted: ${res.peer.name} (${res.peer.public_key ? "e2e" : "plaintext, they have no key yet"})`);
+  if (messages.length > 0) {
+    await ctx.io.stdout("");
+    await printMessages(ctx, messages);
+    await ctx.io.stdout("");
+    await ctx.io.stdout(`ack with: hi-new ack ${arrived.map((m) => m.id).join(" ")}`);
   }
-  ctx.io.stdout(`send with: hi-new send ${res.peer.name} <text>`);
+  await ctx.io.stdout(`send with: hi-new send ${res.peer.name} <text>`);
+  if (receipts.length > 0) await api.ack(receipts);
   return res;
 }
 
@@ -228,13 +223,14 @@ async function finishSetup(ctx: Ctx, anon: Api, profile: Json, token: string, pr
     const notes: string[] = [];
 
     // Save the token before anything else can fail.
-    const existing = ctx.store.load(name);
+    const existing = ctx.store.load(name, anon.origin);
     let creds: Credentials = {
       name,
       token,
       identity: preset?.identity ?? existing?.identity ?? null,
       publicKey: preset?.publicKey ?? existing?.publicKey ?? null,
       origin: anon.origin,
+      ...(existing?.claimEmail ? { claimEmail: existing.claimEmail } : {}),
     };
     let path = ctx.store.save(creds);
 
@@ -255,13 +251,19 @@ async function finishSetup(ctx: Ctx, anon: Api, profile: Json, token: string, pr
     let failed: ApiError | null = null;
     let verify: string | null = typeof profile.verify === "string" ? profile.verify : null;
     if (Object.keys(patch).length > 0) {
+      // Save the private half before the server can publish its public key.
+      path = ctx.store.save(creds);
       try {
         const res = await api.patchMe(patch);
         if (typeof res.verify === "string") verify = res.verify;
       } catch (err) {
-        if (!(err instanceof ApiError)) throw err;
-        failed = err;
-        creds = { ...creds, identity: holdsServerKey ? creds.identity : null, publicKey: holdsServerKey ? creds.publicKey : null };
+        // A lost response can follow a committed registration. Retain the key
+        // and reconcile through the authenticated profile before reporting failure.
+        const current = await api.me().catch(() => null);
+        if (current?.public_key !== creds.publicKey || (patch.email && current?.email !== patch.email)) {
+          if (!(err instanceof ApiError)) throw err;
+          failed = err;
+        }
       }
     }
     path = ctx.store.save(creds);
@@ -276,7 +278,7 @@ async function finishSetup(ctx: Ctx, anon: Api, profile: Json, token: string, pr
     }
 
     if (ctx.json) {
-      ctx.io.stdout(
+      await ctx.io.stdout(
         JSON.stringify(
           {
             name,
@@ -287,7 +289,7 @@ async function finishSetup(ctx: Ctx, anon: Api, profile: Json, token: string, pr
             email: me.email ?? null,
             email_verified: me.email_verified ?? false,
             verify: verify ?? me.verify ?? me.warning ?? null,
-            error: failed ? failed.body : null,
+            error: failed ? { status: failed.status, error: failed.message } : null,
             notes,
             inbox: messages,
             round_trip: trip ? { sent: trip.sent, replied: trip.messages.some((m) => m.from === HOUSE_BOT && m.tag === "granted" && trip!.sent), acked: trip.acked, error: trip.error } : null,
@@ -298,33 +300,33 @@ async function finishSetup(ctx: Ctx, anon: Api, profile: Json, token: string, pr
         ),
       );
     } else {
-      printMessages(ctx, messages);
-      ctx.io.stdout("");
-      ctx.io.stdout(`${anon.origin.replace(/^https?:\/\//, "")}/${name} is set up.`);
-      ctx.io.stdout(`credentials  ${path}`);
-      ctx.io.stdout(`e2e          ${creds.publicKey ? `on (${creds.publicKey})` : "off"}`);
+      await printMessages(ctx, messages);
+      await ctx.io.stdout("");
+      await ctx.io.stdout(`${anon.origin.replace(/^https?:\/\//, "")}/${name} is set up.`);
+      await ctx.io.stdout(`credentials  ${path}`);
+      await ctx.io.stdout(`e2e          ${creds.publicKey ? `on (${creds.publicKey})` : "off"}`);
       const email = typeof me.email === "string" ? me.email : null;
-      ctx.io.stdout(
+      await ctx.io.stdout(
         `email        ${email ? `${email} (${me.email_verified ? "verified" : "not verified yet"})` : "none. Attach one within 7 days: hi-new setup <hn_token> --email addr"}`,
       );
-      if (verify) ctx.io.stdout(`             ${verify}`);
-      for (const note of notes) ctx.io.stdout(`note         ${note}`);
-      if (failed) ctx.io.stdout(`error        ${failed.message}${failed.hint ? `. ${failed.hint}` : ""}`);
+      if (verify) await ctx.io.stdout(`             ${verify}`);
+      for (const note of notes) await ctx.io.stdout(`note         ${note}`);
+      if (failed) await ctx.io.stdout(`error        ${failed.message}${failed.hint ? `. ${failed.hint}` : ""}`);
       if (trip) {
-        ctx.io.stdout(
+        await ctx.io.stdout(
           `round trip   ${trip.sent ? `done. "hi" sent to ${HOUSE_BOT}, reply above` : "not sent"}${trip.acked > 0 ? `, ${trip.acked} message${trip.acked === 1 ? "" : "s"} acked` : ""}`,
         );
-        if (trip.error) ctx.io.stdout(`             ${trip.error}`);
-        if (!ctx.flags.redeem) ctx.io.stdout("next         tell your human what arrived, then ask who to invite: hi-new invite");
+        if (trip.error) await ctx.io.stdout(`             ${trip.error}`);
+        if (!ctx.flags.redeem) await ctx.io.stdout("next         tell your human what arrived, then ask who to invite: hi-new invite");
       } else {
-        ctx.io.stdout("next         hi-new hi (round trip), then hi-new inbox --ack");
+        await ctx.io.stdout("next         hi-new hi (round trip), then hi-new inbox --ack");
       }
     }
     if (failed) throw failed;
     if (ctx.flags.redeem) {
-      if (!ctx.json) ctx.io.stdout("");
+      if (!ctx.json) await ctx.io.stdout("");
       await redeemAndShow(ctx, api, creds.identity, ctx.flags.redeem);
-      if (!ctx.json) ctx.io.stdout("next         tell your human who connected and what they said, then send when asked");
+      if (!ctx.json) await ctx.io.stdout("next         tell your human who connected and what they said, then send when asked");
     }
 }
 
@@ -352,40 +354,62 @@ const commands: Record<string, (ctx: Ctx) => Promise<void>> = {
     const name = ctx.positionals[0];
     if (!name) throw new UsageError("usage: hi-new claim <name> [--email addr] [--no-key] [--no-hi]");
     const anon = anonApi(ctx);
-    const fresh = ctx.flags["no-key"] ? null : await newIdentity();
-    const profile = await anon.claim({ name, public_key: fresh?.publicKey, email: ctx.flags.email });
+    const existing = ctx.store.load(name, anon.origin);
+    const fresh = existing?.identity && existing.publicKey
+      ? { identity: existing.identity, publicKey: existing.publicKey }
+      : ctx.flags["no-key"] ? null : await newIdentity();
+    const token = existing?.token ?? "hn_" + randomBytes(32).toString("base64url");
+    const email = ctx.flags.email ?? existing?.claimEmail;
+    const creds = { name, token, origin: anon.origin, identity: fresh?.identity ?? null, publicKey: fresh?.publicKey ?? null, ...(email ? { claimEmail: email } : {}) };
+    const path = ctx.store.save(creds);
+    let profile: Json;
+    try {
+      profile = await anon.claim({ name, public_key: fresh?.publicKey, email }, token);
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.status !== 402 || typeof err.body.token !== "string") throw err;
+      profile = err.body;
+      ctx.store.save({ ...creds, token: profile.token });
+      const result = { name, reserved: true, credentials: path, checkout_url: profile.checkout_url, price_usd_per_year: profile.price_usd_per_year };
+      await ctx.io.stdout(ctx.json ? JSON.stringify(result, null, 2) : `Reserved ${name}. Credentials saved to ${path}.\nPay: ${profile.checkout_url}\nResume: hi-new claim ${name}`);
+      return;
+    }
     await finishSetup(ctx, anon, profile, profile.token, fresh);
   },
 
   async me(ctx) {
     const { api, creds } = loadCreds(ctx);
     const me = await api.me();
-    if (ctx.json) return ctx.io.stdout(JSON.stringify({ ...me, credentials: ctx.store.path(creds.name) }, null, 2));
-    ctx.io.stdout(`name      ${me.name}`);
-    ctx.io.stdout(`profile   ${me.profile_url}`);
-    ctx.io.stdout(`e2e       ${me.public_key ? `on (${me.public_key}, fingerprint ${me.fingerprint})` : "off"}`);
+    if (ctx.json) return await ctx.io.stdout(JSON.stringify({ ...me, credentials: ctx.store.path(creds.name, creds.origin) }, null, 2));
+    await ctx.io.stdout(`name      ${me.name}`);
+    await ctx.io.stdout(`profile   ${me.profile_url}`);
+    await ctx.io.stdout(`e2e       ${me.public_key ? `on (${me.public_key}, fingerprint ${me.fingerprint})` : "off"}`);
     if (me.public_key && creds.publicKey !== me.public_key) {
-      ctx.io.stdout("          stored identity does not match the server key");
+      await ctx.io.stdout("          stored identity does not match the server key");
     }
-    ctx.io.stdout(`email     ${me.email ? `${me.email} (${me.email_verified ? "verified" : "not verified"})` : "none"}`);
-    ctx.io.stdout(`tier      ${me.tier}${me.paid_until ? ` until ${me.paid_until}` : ""}`);
-    if (me.warning) ctx.io.stdout(`warning   ${me.warning}`);
-    if (me.renewal?.warning) ctx.io.stdout(`renewal   ${me.renewal.warning}`);
+    await ctx.io.stdout(`email     ${me.email ? `${me.email} (${me.email_verified ? "verified" : "not verified"})` : "none"}`);
+    await ctx.io.stdout(`tier      ${me.tier}${me.paid_until ? ` until ${me.paid_until}` : ""}`);
+    if (me.warning) await ctx.io.stdout(`warning   ${me.warning}`);
+    if (me.renewal?.warning) await ctx.io.stdout(`renewal   ${me.renewal.warning}`);
   },
 
   async inbox(ctx) {
     const { api, creds } = loadCreds(ctx);
     const inbox = await api.inbox();
     const messages = await decryptAll(inbox.messages, creds.identity);
-    let acked: Json | null = null;
-    if (ctx.flags.ack && messages.length > 0) acked = await api.ack(messages.map((m) => m.id));
     if (ctx.json) {
-      return ctx.io.stdout(JSON.stringify({ ...inbox, messages, acked: acked?.acknowledged ?? 0 }, null, 2));
+      await ctx.io.stdout(JSON.stringify({ ...inbox, messages }, null, 2));
+    } else {
+      await printMessages(ctx, messages);
     }
-    printMessages(ctx, messages);
-    if (acked) ctx.io.stdout(`acked ${acked.acknowledged}`);
-    else if (messages.length > 0) ctx.io.stdout("");
-    if (messages.length > 0 && !acked) ctx.io.stdout(`ack with: hi-new ack ${messages.map((m) => m.id).join(" ")}`);
+    // The output callback must resolve only after the consumer accepted the data.
+    // Failed decryption is not delivery and must never delete the ciphertext.
+    const ids = messages.filter((m) => m.enc !== "age" || m.decrypted).map((m) => m.id);
+    if (ctx.flags.ack && ids.length > 0) {
+      const acked = await api.ack(ids);
+      if (!ctx.json) await ctx.io.stdout(`acked ${acked.acknowledged}`);
+    } else if (!ctx.json && messages.length > 0) {
+      await ctx.io.stdout(`ack with: hi-new ack ${ids.join(" ")}`);
+    }
   },
 
   async ack(ctx) {
@@ -395,8 +419,8 @@ const commands: Record<string, (ctx: Ctx) => Promise<void>> = {
     }
     const { api } = loadCreds(ctx);
     const res = await api.ack(ids);
-    if (ctx.json) return ctx.io.stdout(JSON.stringify(res, null, 2));
-    ctx.io.stdout(`acked ${res.acknowledged}`);
+    if (ctx.json) return await ctx.io.stdout(JSON.stringify(res, null, 2));
+    await ctx.io.stdout(`acked ${res.acknowledged}`);
   },
 
   async send(ctx) {
@@ -414,9 +438,9 @@ const commands: Record<string, (ctx: Ctx) => Promise<void>> = {
   async invite(ctx) {
     const { api } = loadCreds(ctx);
     const res = await api.invite(ctx.flags.message);
-    if (ctx.json) return ctx.io.stdout(JSON.stringify(res, null, 2));
-    ctx.io.stdout(res.url);
-    ctx.io.stdout(`single use, expires ${res.expires_at}`);
+    if (ctx.json) return await ctx.io.stdout(JSON.stringify(res, null, 2));
+    await ctx.io.stdout(res.url);
+    await ctx.io.stdout(`single use, expires ${res.expires_at}`);
   },
 
   async redeem(ctx) {
@@ -429,29 +453,48 @@ const commands: Record<string, (ctx: Ctx) => Promise<void>> = {
   async grants(ctx) {
     const { api } = loadCreds(ctx);
     const res = await api.grants();
-    if (ctx.json) return ctx.io.stdout(JSON.stringify(res, null, 2));
-    if (res.grants.length === 0) return ctx.io.stdout("No grants. Create an invite: hi-new invite");
+    if (ctx.json) return await ctx.io.stdout(JSON.stringify(res, null, 2));
+    if (res.grants.length === 0) return await ctx.io.stdout("No grants. Create an invite: hi-new invite");
     for (const g of res.grants) {
       const bits = [g.name, g.public_key ? "e2e" : "plaintext"];
       if (g.key_changed) bits.push("KEY CHANGED, re-verify before sending");
-      ctx.io.stdout(bits.join("  "));
+      await ctx.io.stdout(bits.join("  "));
     }
   },
 
   async whoami(ctx) {
-    const names = ctx.store.list();
-    const def = ctx.store.defaultName();
-    if (ctx.json) return ctx.io.stdout(JSON.stringify({ dir: ctx.store.dir, default: def, names }, null, 2));
-    if (names.length === 0) return ctx.io.stdout(`No credentials in ${ctx.store.dir}. Run: hi-new setup <hns_code>`);
-    for (const n of names) ctx.io.stdout(`${n}${n === def ? "  (default)" : ""}`);
+    const selection = ctx.store.defaultSelection();
+    const origin = originFor(ctx, selection?.origin);
+    const names = ctx.store.list(origin);
+    const def = selection?.origin === origin ? selection.name : null;
+    if (ctx.json) return await ctx.io.stdout(JSON.stringify({ dir: ctx.store.dir, default: def, names }, null, 2));
+    if (names.length === 0) return await ctx.io.stdout(`No credentials in ${ctx.store.dir}. Run: hi-new setup <hns_code>`);
+    for (const n of names) await ctx.io.stdout(`${n}${n === def ? "  (default)" : ""}`);
   },
 };
+
+export function writeOutput(stream: NodeJS.WritableStream, line: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onError = (error: Error) => reject(error);
+    stream.once("error", onError);
+    stream.write(line + "\n", (error?: Error | null) => {
+      if (error) {
+        // Keep the listener through the stream's corresponding error event.
+        setImmediate(() => stream.removeListener("error", onError));
+        reject(error);
+      } else {
+        stream.removeListener("error", onError);
+        resolve();
+      }
+    });
+  });
+}
 
 export async function run(argv: string[], opts: RunOptions = {}): Promise<number> {
   const env = opts.env ?? process.env;
   const io: Io = opts.io ?? {
-    stdout: (line) => process.stdout.write(line + "\n"),
-    stderr: (line) => process.stderr.write(line + "\n"),
+    stdout: (line) => writeOutput(process.stdout, line),
+    stderr: (line) => writeOutput(process.stderr, line),
     readStdin: () => Promise.resolve(""),
   };
   let json = false;
@@ -459,11 +502,11 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
     const parsed = parseArgs(argv);
     json = parsed.flags.json === true;
     if (parsed.flags.version) {
-      io.stdout(VERSION);
+      await io.stdout(VERSION);
       return 0;
     }
     if (parsed.flags.help || !parsed.command || parsed.command === "help") {
-      io.stdout(USAGE);
+      await io.stdout(USAGE);
       return parsed.command || parsed.flags.help ? 0 : 2;
     }
     const command = commands[parsed.command];
@@ -481,17 +524,17 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
     return 0;
   } catch (err) {
     if (err instanceof ApiError) {
-      if (json) io.stderr(JSON.stringify({ status: err.status, ...err.body }));
-      else io.stderr(`error: ${err.message} (HTTP ${err.status})${err.hint ? `\n${err.hint}` : ""}`);
+      if (json) await io.stderr(JSON.stringify({ status: err.status, error: err.message, hint: err.hint }));
+      else await io.stderr(`error: ${err.message} (HTTP ${err.status})${err.hint ? `\n${err.hint}` : ""}`);
       return 1;
     }
     if (err instanceof UsageError) {
-      io.stderr(json ? JSON.stringify({ error: "usage", hint: err.message }) : `error: ${err.message}`);
+      await io.stderr(json ? JSON.stringify({ error: "usage", hint: err.message }) : `error: ${err.message}`);
       return 2;
     }
     const cause = err instanceof Error && err.cause instanceof Error ? ` (${err.cause.message})` : "";
     const message = (err instanceof Error ? err.message : String(err)) + cause;
-    io.stderr(json ? JSON.stringify({ error: "failed", hint: message }) : `error: ${message}`);
+    await io.stderr(json ? JSON.stringify({ error: "failed", hint: message }) : `error: ${message}`);
     return 1;
   }
 }

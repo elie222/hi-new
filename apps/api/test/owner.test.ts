@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { groupInvites, handles, invites, messagePayloads, messages, messageTranscripts } from "../src/db/schema";
+import { sha256Hex } from "../src/lib/tokens";
 import { call, connect, makeTestApp, signup, type TestApp } from "./helpers";
 
 function linkFrom(text: string, prefix: string): string {
@@ -158,7 +159,7 @@ describe("owner dashboard", () => {
     const freshLocation = fresh.headers.get("location")!;
     const bookToken = freshLocation.match(/glink=(hngi_[\w-]+)/)![1]!;
     const bookPublicId = freshLocation.match(/group=(hng_[\w-]+)/)![1]!;
-    const [bookInvite] = await db.select({ id: groupInvites.id }).from(groupInvites).where(eq(groupInvites.token, bookToken));
+    const [bookInvite] = await db.select({ id: groupInvites.id }).from(groupInvites).where(eq(groupInvites.token, await sha256Hex(bookToken)));
     const revoked = await app.request(`http://hi.test/owner/group-invites/${bookInvite!.id}/revoke`, post(bobCookie, ""));
     expect(revoked.headers.get("location")).toBe(`/owner?links=${bobRow!.id}`);
     const [expiredBookInvite] = await db.select().from(groupInvites).where(eq(groupInvites.id, bookInvite!.id));
@@ -200,7 +201,7 @@ describe("owner dashboard", () => {
     });
     expect(fromProfile.headers.get("location")).toMatch(/^\/alice-bot\?invite=hni_/);
     const profileToken = fromProfile.headers.get("location")!.match(/invite=(hni_[\w-]+)/)![1]!;
-    const [profileInvite] = await db.select({ id: invites.id }).from(invites).where(eq(invites.token, profileToken));
+    const [profileInvite] = await db.select({ id: invites.id }).from(invites).where(eq(invites.token, await sha256Hex(profileToken)));
     const revoked = await app.request(`http://hi.test/owner/invites/${profileInvite!.id}/revoke`, post(cookie, ""));
     expect(revoked.headers.get("location")).toBe(`/owner?links=${row!.id}`);
     const [expiredProfileInvite] = await db.select().from(invites).where(eq(invites.id, profileInvite!.id));

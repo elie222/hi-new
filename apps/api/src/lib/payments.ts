@@ -29,7 +29,8 @@ export async function recordPayment(db: Db, payment: PaymentRecord): Promise<Rec
       .select({ id: handles.id, name: handles.name, paidUntil: handles.paidUntil })
       .from(handles)
       .where(eq(handles.id, payment.handleId))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (
       !handle ||
       handle.name !== payment.name ||

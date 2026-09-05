@@ -59,7 +59,7 @@ async function startVerification(
   await db.insert(emailTokens).values({
     handleId,
     kind: "verify",
-    token: verifyToken,
+    token: await sha256Hex(verifyToken),
     expiresAt: new Date(Date.now() + VERIFY_WINDOW_MS),
   });
   const mail = verifyEmailText(name, `${c.get("origin")}/v/${verifyToken}`);
@@ -75,7 +75,7 @@ function validateOptionalColor(value: unknown): { color: BotColor | null } | { e
 function validateOptionalWebhook(value: unknown): { webhookUrl: string | null } | { error: string } {
   if (value == null || value === "") return { webhookUrl: null };
   if (typeof value !== "string" || !isSafeWebhookUrl(value)) {
-    return { error: "webhook_url must be a public http(s) URL" };
+    return { error: "webhook_url must be a public HTTPS URL" };
   }
   return { webhookUrl: value };
 }
@@ -198,10 +198,6 @@ handleRoutes.post("/api/handles", async (c) => {
   let handleId: number;
 
   if (existing) {
-    if (!paid || existing.status !== "pending") {
-      return c.json({ error: "name_taken" }, 409);
-    }
-
     const claimMatches =
       existing.email === email &&
       existing.publicKey === keyCheck.publicKey &&
@@ -214,22 +210,32 @@ handleRoutes.post("/api/handles", async (c) => {
 
     bearerHash = existing.bearerHash;
     handleId = existing.id;
+    const claimToken = c.req.header("x-hi-new-claim-token")?.trim();
+    if (!claimToken || (await sha256Hex(claimToken)) !== bearerHash) {
+      return c.json({ error: "name_taken" }, 409);
+    }
+    token = claimToken;
     if (paymentCredential) {
       if (!mppCredentialMatchesClaim(paymentRequest, bearerHash, requestHash)) {
         return c.json({ error: "invalid_payment_claim" }, 409);
       }
-    } else {
-      const claimToken = c.req.header("x-hi-new-claim-token")?.trim();
-      if (!claimToken || (await sha256Hex(claimToken)) !== bearerHash) {
-        return c.json({ error: "name_taken" }, 409);
-      }
-      token = claimToken;
+    }
+    if (existing.status === "active") {
+      if (!token) return c.json({ error: "name_taken" }, 409);
+      return c.json({ name, token, profile_url: `${origin}/${name}`, public_key: existing.publicKey,
+        e2e: existing.publicKey !== null, color: effectiveColor(name, existing.color), email: existing.email,
+        ...(paid ? { status: "active", paid_until: existing.paidUntil, auto_renew: Boolean(existing.stripeSubscriptionId) } : {}),
+        email_verified: existing.emailVerifiedAt !== null, next_steps: nextSteps(origin, existing.publicKey !== null) }, 201);
     }
   } else {
     if (paymentCredential) {
       return c.json({ error: "payment_claim_expired", hint: "Start the Link MPP payment again." }, 409);
     }
-    token = randomToken("hn");
+    const suppliedToken = c.req.header("x-hi-new-claim-token")?.trim();
+    if (suppliedToken && !/^hn_[A-Za-z0-9_-]{43}$/.test(suppliedToken)) {
+      return c.json({ error: "invalid_claim_token" }, 400);
+    }
+    token = suppliedToken || randomToken("hn");
     bearerHash = await sha256Hex(token);
     try {
       const [inserted] = await db
@@ -337,12 +343,13 @@ handleRoutes.post("/api/handles", async (c) => {
   if (!paymentCredential) {
     throw new Error("MPP returned a paid result without a Payment credential");
   }
-  const activeToken = randomToken("hn");
+  // The caller already persisted and proved this token before paying. Keeping
+  // it makes a lost success response recoverable without another payment.
+  const activeToken = token!;
   const recorded = await recordPayment(db, {
     reference: payment.stripeReferenceId,
     source: "mpp",
     amountCents: priceCents,
-    bearerHash: await sha256Hex(activeToken),
     handleId,
     name,
   });
@@ -357,7 +364,7 @@ handleRoutes.post("/api/handles", async (c) => {
         paid_until: recorded.paidUntil,
         auto_renew: false,
         payment: "mpp",
-        note: "The handle is active for one year. This token replaces the pre-payment token. Before it lapses, GET /api/handles/me reports a renewal warning: your human can turn on auto-renew from the owner dashboard, or you can pay another year with Link.",
+        note: "The handle is active for one year. Keep using your saved token. GET /api/handles/me reports renewal warnings.",
       },
       201,
     ),
@@ -491,6 +498,7 @@ handleRoutes.patch("/api/handles/me", requireAuth, requireScope("profile:write")
     updates.color = colorCheck.color;
   }
   if ("email" in body) {
+    if (c.get("auth").kind !== "owner") return c.json({ error: "owner_token_required" }, 403);
     if (!isEmail(body.email)) return c.json({ error: "invalid_email" }, 400);
     newEmail = body.email.toLowerCase();
     if (newEmail !== me.email) {
@@ -584,16 +592,18 @@ handleRoutes.post("/api/setup", async (c) => {
   const [me] = await db.select().from(handles).where(eq(handles.setupCodeHash, await setupCodeHash(code))).limit(1);
   const expired = !me?.setupCodeExpiresAt || me.setupCodeExpiresAt.getTime() < Date.now();
   const token = me && !expired && me.setupTokenEnc ? await openToken(code, me.setupTokenEnc) : null;
-  if (!me || !token) {
+  if (!me || !token || (await sha256Hex(token)) !== me.bearerHash) {
     return c.json(
       { error: "invalid_setup_code", hint: "Setup codes work once and expire after 15 minutes. Ask your human for a fresh one from the setup page." },
       410,
     );
   }
-  await db
+  const [consumed] = await db
     .update(handles)
     .set({ setupCodeHash: null, setupTokenEnc: null, setupCodeExpiresAt: null })
-    .where(eq(handles.id, me.id));
+    .where(and(eq(handles.id, me.id), eq(handles.setupCodeHash, me.setupCodeHash!), eq(handles.bearerHash, me.bearerHash), gte(handles.setupCodeExpiresAt, new Date())))
+    .returning({ id: handles.id });
+  if (!consumed) return c.json({ error: "invalid_setup_code" }, 410);
   const origin = c.get("origin");
   return c.json({
     name: me.name,

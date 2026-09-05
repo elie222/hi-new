@@ -665,6 +665,7 @@ const faqText = (answer: FaqPart[]) =>
 
     <script>
       import { checkName } from "@hi-new/domain";
+      import { prepareClaim } from "../lib/claim";
 
       const input = document.getElementById("handle") as HTMLInputElement;
       const statusEl = document.getElementById("claim-status")!;
@@ -755,15 +756,18 @@ const faqText = (answer: FaqPart[]) =>
         claimBtn.disabled = true;
         claimBtn.textContent = currentPrice ? "Reserving…" : "Claiming…";
         try {
+          let pending;
+          try { pending = prepareClaim(h); }
+          catch { setStatus("Enable browser storage before claiming a name.", "#C94244"); return; }
           const ref = getRef();
           const res = await fetch("/api/handles", {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: { "content-type": "application/json", "x-hi-new-claim-token": pending.token },
             body: JSON.stringify({ name: h, ...(ref && ref !== h ? { ref } : {}) }),
           });
           const data = await res.json();
           if (res.status === 201 || res.status === 402) {
-            sessionStorage.setItem(
+            try { sessionStorage.setItem(
               "hi_claim",
               JSON.stringify({
                 name: data.name,
@@ -773,7 +777,10 @@ const faqText = (answer: FaqPart[]) =>
                 checkout_url: data.checkout_url,
                 ...(inviteLink && inviteFrom ? { link: inviteLink, from: inviteFrom } : {}),
               }),
-            );
+            ); } catch {
+              setStatus("Claim succeeded. Save this token before leaving: " + data.token, "#C94244");
+              return;
+            }
             if (res.status === 201) {
               location.href = "/" + encodeURIComponent(data.name) + "/setup";
               return;
@@ -781,7 +788,7 @@ const faqText = (answer: FaqPart[]) =>
             claimBtn.textContent = "Taking you to checkout…";
             const co = await fetch("/buy/" + encodeURIComponent(data.name) + "/checkout", {
               method: "POST",
-              headers: { accept: "application/json" },
+              headers: { accept: "application/json", "x-hi-new-claim-token": data.token },
             });
             const cod = await co.json();
             if (co.ok && cod.url) {

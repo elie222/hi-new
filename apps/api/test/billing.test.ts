@@ -176,7 +176,9 @@ describe("subscriptions", () => {
   });
 
   test("auto-renew for an MPP-paid name starts billing when the paid year ends", async () => {
+    const { db } = await makeTestApp();
     const paidUntil = new Date(Date.now() + 200 * DAY);
+    const [handle] = await db.insert(handles).values({ name: "vlad", bearerHash: "renew_checkout", email: "vlad@owners.example", paidUntil }).returning();
     const originalFetch = globalThis.fetch;
     let body = "";
     globalThis.fetch = (async (_input, init) => {
@@ -184,8 +186,8 @@ describe("subscriptions", () => {
       return Response.json({ id: "cs_renew", url: "https://checkout.stripe.com/c/pay/cs_renew" });
     }) as typeof fetch;
     try {
-      const url = await createSubscriptionCheckout(stripeClient("sk_test_x"), {
-        handle: { id: 7, name: "vlad", email: "vlad@owners.example", stripeCustomerId: null, paidUntil },
+      const url = await createSubscriptionCheckout(db, stripeClient("sk_test_x"), {
+        handle: handle!,
         priceCents: 15000,
         startAtPaidUntil: true,
         successUrl: "http://hi.test/owner?renew=on",

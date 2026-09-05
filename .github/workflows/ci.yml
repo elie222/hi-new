@@ -18,10 +18,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
 
@@ -41,10 +43,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
 
@@ -64,10 +68,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
 
@@ -99,7 +105,7 @@ jobs:
 
       - name: Upload e2e report and screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -108,25 +114,7 @@ jobs:
             .e2e-gallery
           if-no-files-found: warn
           retention-days: 14
-
-      - name: Publish screenshot gallery to Hetzner S3
-        if: always()
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ vars.S3_REGION }}
-          AWS_EC2_METADATA_DISABLED: "true"
-          S3_BUCKET: ${{ vars.S3_BUCKET }}
-          S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
-          PLAYWRIGHT_PUBLIC_BASE_URL: ${{ vars.PLAYWRIGHT_PUBLIC_BASE_URL }}
-          PLAYWRIGHT_RUN_ATTEMPT: ${{ github.run_attempt }}
-          PLAYWRIGHT_RUN_ID: ${{ github.run_id }}
-        run: |
-          if [[ -z "$AWS_ACCESS_KEY_ID" || -z "$AWS_SECRET_ACCESS_KEY" || -z "$S3_BUCKET" || -z "$S3_ENDPOINT" || -z "$PLAYWRIGHT_PUBLIC_BASE_URL" ]]; then
-            echo "::warning::S3 screenshot publication is not configured; the GitHub artifact still contains the complete gallery."
-            exit 0
-          fi
-          bash scripts/publish-e2e-gallery.sh
+          include-hidden-files: true
 
       - name: Enforce end-to-end result
         if: steps.e2e.outcome != 'success'

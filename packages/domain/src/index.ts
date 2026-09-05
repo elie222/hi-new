@@ -10,7 +10,7 @@ const RESERVED = new Set([
   "assets", "static", "favicon", "robots", "sitemap", "terms", "privacy",
   "security", "abuse", "contact", "team", "pricing", "invite", "invites",
   "dm", "rooms", "room", "me", "you", "everyone", "welcome", "claimed",
-  "recover", "verify", "mcp", "owner",
+  "recover", "verify", "mcp", "owner", "setup", "connect", "og",
 ]);
 
 // Yearly founding price in cents. 0 = free.

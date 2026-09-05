@@ -27,6 +27,8 @@ export type OwnerMessageView = {
   peer: string;
   peerColor: string | null;
   group: string | null;
+  groupId?: string | null;
+  dispatchId?: string | null;
   enc: "age" | "none";
   tag: "granted" | "invite" | "group";
   status: "queued" | "opened" | "acknowledged" | "expired";
@@ -460,20 +462,20 @@ function sender(m: OwnerMessageView): string {
 // messages read top to bottom like a chat.
 type Thread = { key: string; me: OwnerMessageView; messages: OwnerMessageView[] };
 const STATUS_RANK = { acknowledged: 3, opened: 2, queued: 1, expired: 0 } as const;
-function threadsOf(messages: OwnerMessageView[]): Thread[] {
+export function threadsOf(messages: OwnerMessageView[]): Thread[] {
   const byKey = new Map<string, Thread>();
   // A group message fans out as one copy per member. Show it once, keeping
   // the copy that got furthest (someone read it beats nobody yet).
   const copies = new Map<string, { at: number; status: OwnerMessageView["status"] }>();
   for (const m of messages) {
-    const key = m.group ? `g:${m.handle}:${m.group}` : `d:${[m.handle, m.peer].sort().join(":")}`;
+    const key = m.group ? `g:${m.handle}:${m.groupId ?? `legacy:${m.id}`}` : `d:${[m.handle, m.peer].sort().join(":")}`;
     let thread = byKey.get(key);
     if (!thread) {
       thread = { key, me: m, messages: [] };
       byKey.set(key, thread);
     }
-    if (m.group) {
-      const copyKey = `${key}|${sender(m)}|${Math.floor(m.createdAt.getTime() / 10000)}|${m.body ?? ""}`;
+    if (m.group && m.dispatchId) {
+      const copyKey = `${key}|${m.dispatchId}`;
       const prior = copies.get(copyKey);
       if (prior) {
         if (STATUS_RANK[m.status] > STATUS_RANK[prior.status]) {
@@ -720,15 +722,15 @@ export function OwnerDashboardPage(props: {
             }] : []),
           ].sort((a, b) => b.expiresAt.getTime() - a.expiresAt.getTime());
           const freshInvite = props.invite?.handleId === handle.id ? props.invite.url : null;
-          const groupByName = new Map(groupsOf.map((g) => [g.name, g] as const));
+          const groupById = new Map(groupsOf.map((g) => [g.publicId, g] as const));
           const usedGroups = new Set<string>();
           const usedPeers = new Set<string>();
           const convos: ReactNode[] = [];
           for (const thread of threadsByBot.get(handle.name) ?? []) {
             const newest = thread.messages[thread.messages.length - 1]!;
             if (thread.me.group) {
-              usedGroups.add(thread.me.group);
-              const owned = groupByName.get(thread.me.group);
+              if (thread.me.groupId) usedGroups.add(thread.me.groupId);
+              const owned = thread.me.groupId ? groupById.get(thread.me.groupId) : undefined;
               // Row avatars: other members who actually spoke (newest first),
               // topped up with quiet ones, so the cluster shows the real mix.
               const members = new Map<string, string | null>();
@@ -781,7 +783,7 @@ export function OwnerDashboardPage(props: {
             }
           }
           for (const g of groupsOf) {
-            if (usedGroups.has(g.name)) continue;
+            if (usedGroups.has(g.publicId)) continue;
             convos.push(
               <Convo
                 key={`g:${g.publicId}`}

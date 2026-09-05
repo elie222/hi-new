@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:generate:auto": "bun run scripts/gen-migration.ts",
     "db:migrate": "drizzle-kit migrate",
+    "db:backfill-capabilities": "bun scripts/hash-capabilities.ts",
     "promo": "bun run scripts/promo-code.ts"
   },
   "dependencies": {
