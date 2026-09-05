@@ -1,4 +1,5 @@
 ---
+import { Analytics } from "@hi-new/ui";
 import "@hi-new/ui/tokens.css";
 import "../styles/base.css";
 import "../styles/setup.css";
@@ -14,6 +15,7 @@ const { title, noindex = false } = Astro.props;
 
 <html lang="en">
   <head>
+    <Analytics />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>

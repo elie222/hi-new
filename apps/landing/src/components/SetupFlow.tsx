@@ -18,6 +18,7 @@ import {
   type BotColor,
 } from "@hi-new/ui";
 import { markClaimActive, readClaim } from "../lib/claim";
+import { track } from "@hi-new/ui/analytics";
 import LiveHome from "./LiveHome";
 
 type Session = {
@@ -293,6 +294,12 @@ export default function SetupFlow() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
+  useEffect(() => {
+    if (session && mode === "flow" && screen !== "boot") {
+      track("setup_step_viewed", { source: "setup", step: screen });
+    }
+  }, [session?.name, mode, screen]);
+
   if (!session) return null;
   const { name, token, color } = session;
   const inSteps = screen === "paste" || screen === "email";
@@ -329,7 +336,10 @@ export default function SetupFlow() {
         headers: { accept: "application/json", "x-hi-new-claim-token": token },
       });
       const data = await res.json();
-      if (res.ok && data.url) return void (location.href = data.url);
+      if (res.ok && data.url) {
+        track("checkout_started", { source: "setup" });
+        return void (location.href = data.url);
+      }
       if (data.error === "name_taken") {
         const me = await fetch("/api/handles/me", { headers: auth(token), cache: "no-store" }).catch(() => null);
         if (me?.ok) {
@@ -350,7 +360,8 @@ export default function SetupFlow() {
   const copyPrompt = async () => {
     const fresh = code.current && Date.now() < code.current.expires - MIN_CODE_LIFE_MS;
     if (!fresh) await refreshCode(session);
-    navigator.clipboard?.writeText(buildPrompt(name, token)).catch(() => {});
+    navigator.clipboard?.writeText(buildPrompt(name, token))
+      .then(() => track("setup_prompt_copied", { source: "setup" })).catch(() => {});
     setCopied(true);
     setEverCopied(true);
     clearTimeout(copyTimer.current);
@@ -376,6 +387,7 @@ export default function SetupFlow() {
       });
       const data = await res.json();
       if (res.ok) {
+        track("owner_email_requested", { source: "setup" });
         setEmail({ status: "sent", address });
         if (screen === "email") goStep("live");
       } else {

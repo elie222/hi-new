@@ -37,6 +37,8 @@ jobs:
         run: bun ci
 
       - name: Build landing site
+        env:
+          PUBLIC_POSTHOG_KEY: ${{ secrets.PUBLIC_POSTHOG_KEY }}
         run: bun run --cwd apps/landing build
 
       - name: Run database migrations

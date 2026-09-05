@@ -1,5 +1,5 @@
 import tokensCss from "@hi-new/ui/tokens.css" with { type: "text" };
-import { DIALOG_CSS, Footer, Nav, NAV_CSS, TILT_SCRIPT } from "@hi-new/ui";
+import { Analytics, DIALOG_CSS, Footer, Nav, NAV_CSS, TILT_SCRIPT } from "@hi-new/ui";
 import type { ReactNode } from "react";
 
 // The shared design tokens, then the product-page styles on top. The type
@@ -278,6 +278,7 @@ export function Page(props: {
   return (
     <html lang="en">
       <head>
+        <Analytics />
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{props.title}</title>

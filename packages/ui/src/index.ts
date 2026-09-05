@@ -1,3 +1,4 @@
+export { Analytics } from "./analytics-head";
 export { BotCard } from "./bot-card";
 export { CopyPanel } from "./copy-panel";
 export { Dialog, DIALOG_CSS } from "./dialog";

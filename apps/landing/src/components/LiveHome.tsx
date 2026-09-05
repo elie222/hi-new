@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { track } from "@hi-new/ui/analytics";
 import { DEFAULT_PURPOSE, inviteMessage, purposeFor, PurposePicker, StepFooter, type Purpose } from "@hi-new/ui";
 
 const HOUSE = "hi";
@@ -90,6 +91,7 @@ export default function LiveHome({ name, token, invitedBy, onSetupPrompt }: Prop
       });
       const data = await res.json();
       if (res.ok) {
+        track("invite_created", { source: "setup" });
         navigator.clipboard?.writeText(inviteMessage(picked, data.url)).catch(() => {});
         setInvite(data.url);
         try { sessionStorage.setItem(inviteKey, data.url); } catch {}
