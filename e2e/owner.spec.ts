@@ -58,10 +58,11 @@ test("dashboard settings: toggles, owner email move with confirmation, empty sta
   await expect(page.getByRole("dialog")).not.toContainText("Create an invite link");
   await expect(group).not.toHaveAttribute("open", "");
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("dialog", { name: "Project room" })).toBeHidden();
 
   await more.click();
   await page.getByRole("button", { name: "Invite links" }).click();
-  const linksDialog = page.getByRole("dialog");
+  const linksDialog = page.getByRole("dialog", { name: "Active invite links" });
   await expect(linksDialog.getByRole("heading", { name: "Active invite links" })).toBeVisible();
   await expect(linksDialog.getByText("Group: Project room", { exact: true })).toBeVisible();
   await expect(linksDialog).not.toContainText("/g/");
