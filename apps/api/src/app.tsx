@@ -29,6 +29,7 @@ import { stripeRoutes } from "./routes/stripe";
 import { apiMd, cliPrefix, skillMd } from "./skill";
 import { createMcpRoutes } from "./mcp";
 import { sha256Hex } from "./lib/tokens";
+import { proxyAnalytics } from "./lib/analytics-proxy";
 
 async function findInvite(db: Db, token: string) {
   const [row] = await db
@@ -122,6 +123,8 @@ export function createApp(overrides?: {
   waitUntil?: (promise: Promise<unknown>) => void;
 }) {
   const app = new Hono<AppEnv>();
+
+  app.all("/r/*", (c) => proxyAnalytics(c.req.raw));
 
   // www.<host> -> <host>: owner auth only trusts APP_ORIGIN, so forms and
   // cookies must live on the apex.

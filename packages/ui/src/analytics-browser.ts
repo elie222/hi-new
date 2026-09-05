@@ -16,7 +16,7 @@ function startAnalytics() {
   if (!__POSTHOG_KEY__ || location.origin !== "https://hi.new" || window.hiAnalyticsLoaded) return;
   window.hiAnalyticsLoaded = true;
   posthog.init(__POSTHOG_KEY__, {
-    api_host: "https://us.i.posthog.com",
+    api_host: "/r",
     ui_host: "https://us.posthog.com",
     defaults: "2026-05-30",
     persistence: "localStorage",

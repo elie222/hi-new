@@ -1,7 +1,7 @@
 const result = await Bun.build({
   entrypoints: ["../../packages/ui/src/analytics-browser.ts"],
   outdir: "public",
-  naming: "analytics.js",
+  naming: "site.js",
   target: "browser",
   minify: true,
   define: {
