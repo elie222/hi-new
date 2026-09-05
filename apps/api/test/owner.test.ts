@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { groupInvites, handles, invites, messagePayloads, messages, messageTranscripts } from "../src/db/schema";
+import { safeNext } from "../src/lib/owner-auth";
+import { OwnerLoginPage } from "../src/pages/owner";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "react";
+import { user } from "../src/db/auth-schema";
 import { sha256Hex } from "../src/lib/tokens";
 import { call, connect, makeTestApp, signup, type TestApp } from "./helpers";
 
@@ -521,5 +526,68 @@ describe("owner email moves", () => {
     [handle] = await db.select().from(handles).where(eq(handles.id, row!.id));
     expect(handle!.email).toBe("dave@owners.example");
     expect(handle!.pendingEmail).toBeNull();
+  });
+});
+
+
+describe("website claims", () => {
+  test("anonymous and stale sessions cannot reserve free or paid names, even with an email", async () => {
+    const { app, db } = await makeTestApp();
+    for (const name of ["web-free", "web"]) {
+      for (const cookie of ["", "hi.session_token=invalid"]) {
+        const response = await call(app, "POST", "/api/owner/claims", {
+          body: { name, email: "someone@example.com" }, headers: { cookie },
+        });
+        expect(response.status).toBe(401);
+        expect(response.json.error).toBe("sign_in_required");
+      }
+    }
+    expect(await db.select().from(handles)).toHaveLength(0);
+  });
+
+  test("claims attach only to the verified account and resume without leaking credentials", async () => {
+    const { app, db, sent } = await makeTestApp();
+    const cookie = await signIn(app, sent, "owner@example.com");
+    for (const [name, status] of [["web-free", 201], ["web", 402]] as const) {
+      const token = "hn_" + (status === 201 ? "a" : "b").repeat(43);
+      const options = { body: { name, email: "elsewhere@example.com" }, headers: { cookie, "x-hi-new-claim-token": token } };
+      const claimed = await call(app, "POST", "/api/owner/claims", options);
+      expect(claimed.status).toBe(status);
+      expect(claimed.json).toMatchObject({ email: "owner@example.com", email_verified: true, token });
+      const retry = await call(app, "POST", "/api/owner/claims", options);
+      expect(retry.status).toBe(status);
+      expect(retry.json.token).toBe(token);
+      const resumed = await call(app, "POST", "/api/owner/claims", { body: { name }, headers: { cookie } });
+      expect(resumed.status).toBe(200);
+      expect(resumed.json.owner_url).toBe(status === 201 ? "/owner" : "/buy/web");
+      expect(resumed.json.token).toBeUndefined();
+    }
+    const otherCookie = await signIn(app, sent, "other@example.com");
+    const taken = await call(app, "POST", "/api/owner/claims", { body: { name: "web-free" }, headers: { cookie: otherCookie } });
+    expect(taken.status).toBe(409);
+    expect(taken.json.token).toBeUndefined();
+    await db.update(user).set({ emailVerified: false }).where(eq(user.email, "owner@example.com"));
+    const unverified = await call(app, "POST", "/api/owner/claims", { body: { name: "unverified-web" }, headers: { cookie } });
+    expect(unverified.status).toBe(401);
+  });
+
+  test("cross-site website claims are rejected", async () => {
+    const { app, sent } = await makeTestApp();
+    const cookie = await signIn(app, sent, "owner@example.com");
+    const result = await call(app, "POST", "/api/owner/claims", {
+      body: { name: "cross-site" }, headers: { cookie, origin: "https://elsewhere.example", "sec-fetch-site": "cross-site" },
+    });
+    expect(result.status).toBe(403);
+  });
+
+  test("claim destinations and invite context survive all sign-in forms", () => {
+    const next = "/?claim=new-bot&ref=alice-bot&link=hni_example&from=alice-bot";
+    expect(safeNext(next)).toBe(next);
+    for (const invalid of ["//evil.example", "/?claim=bot&next=https://evil.example", "/?claim=bot#ignored", "/?claim=bot&claim=other", "/?claim=%2F%2Fevil.example"]) {
+      expect(safeNext(invalid)).toBeNull();
+    }
+    const html = renderToStaticMarkup(createElement(OwnerLoginPage, { providers: { github: true, google: true }, error: null, next }));
+    expect(html.match(/name="next"/g)).toHaveLength(3);
+    expect(html).toContain("Sign in to claim your name");
   });
 });

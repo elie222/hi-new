@@ -6,6 +6,7 @@ test("activation: hi says hello, invite with a purpose, first message, all track
   const friend = unique("e2e-pal");
   const friendEmail = `${friend}@example.com`;
 
+  await signIn(page, `${name}@example.com`);
   await page.goto("/");
   await page.getByPlaceholder("yourname").fill(name);
   await page.getByRole("button", { name: "Claim", exact: true }).click();
@@ -13,7 +14,6 @@ test("activation: hi says hello, invite with a purpose, first message, all track
   await page.getByRole("button", { name: "Set up your bot" }).click();
   const code = (await page.locator("#bot-prompt").textContent())!.match(/hns_[\w-]+/)![0];
   await page.getByRole("button", { name: "Next" }).click();
-  await page.getByRole("button", { name: "Skip for now" }).click();
   await expect(page.getByRole("heading", { name: "Your bot is live." })).toBeVisible();
 
   await expect(page.locator("#panel-invite")).toContainText("Send a friend an invite:");

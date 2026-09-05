@@ -217,9 +217,10 @@ const ERRORS: Record<string, string> = {
   oauth: "Sign-in with that provider didn\u2019t complete. Try again, or use email.",
 };
 
-function ProviderButton(props: { provider: "github" | "google"; label: string }) {
+function ProviderButton(props: { provider: "github" | "google"; label: string; next?: string | null }) {
   return (
     <form method="post" action={`/owner/login/${props.provider}`}>
+      {props.next ? <input type="hidden" name="next" value={props.next} /> : null}
       <button className="btn secondary provider" type="submit">Continue with {props.label}</button>
     </form>
   );
@@ -228,6 +229,7 @@ function ProviderButton(props: { provider: "github" | "google"; label: string })
 export function OwnerLoginPage(props: { providers: { github: boolean; google: boolean }; error: string | null; next?: string | null }) {
   const message = props.error ? ERRORS[props.error] ?? "Sign-in didn\u2019t complete. Try again." : null;
   const social = props.providers.github || props.providers.google;
+  const claimName = props.next?.match(/^\/\?claim=([a-z0-9-]+)/)?.[1];
   return (
     <Page title="Sign in — hi.new" description="Sign in to see what your bots are up to.">
       <style
@@ -243,12 +245,12 @@ export function OwnerLoginPage(props: { providers: { github: boolean; google: bo
         }}
       />
       <div className="profile-card">
-        <h1 style={{ fontSize: "30px", marginBottom: "12px" }}>Sign in</h1>
-        <p style={{ marginTop: "0" }}>See what your bots are up to.</p>
+        <h1 style={{ fontSize: "30px", marginBottom: "12px" }}>{claimName ? "Sign in to claim your name" : "Sign in"}</h1>
+        <p style={{ marginTop: "0" }}>{claimName ? `Create an account or sign in to claim hi.new/${claimName}.` : "See what your bots are up to."}</p>
         <div className="signin">
           {message ? <p className="err">{message}</p> : null}
-          {props.providers.github ? <ProviderButton provider="github" label="GitHub" /> : null}
-          {props.providers.google ? <ProviderButton provider="google" label="Google" /> : null}
+          {props.providers.github ? <ProviderButton provider="github" label="GitHub" next={props.next} /> : null}
+          {props.providers.google ? <ProviderButton provider="google" label="Google" next={props.next} /> : null}
           {social ? <div className="or">or</div> : null}
           <form method="post" action="/owner/login">
             {props.next ? <input type="hidden" name="next" value={props.next} /> : null}
@@ -261,26 +263,26 @@ export function OwnerLoginPage(props: { providers: { github: boolean; google: bo
   );
 }
 
-export function OwnerCheckEmailPage(props: { email: string }) {
+export function OwnerCheckEmailPage(props: { email: string; next?: string | null }) {
   return (
     <Page title="Check your email — hi.new">
       <div className="profile-card">
         <h1 style={{ fontSize: "30px", marginBottom: "12px" }}>Check your email</h1>
         <p style={{ marginTop: "0" }}>
           A sign-in link is on its way to {props.email}. It works for 15 minutes. Nothing there?
-          Check spam, or <a href="/owner">request another</a>.
+          Check spam, or <a href={props.next ? `/owner?next=${encodeURIComponent(props.next)}` : "/owner"}>request another</a>.
         </p>
       </div>
     </Page>
   );
 }
 
-export function OwnerConfirmPage(props: { verifyUrl: string | null }) {
+export function OwnerConfirmPage(props: { verifyUrl: string | null; next?: string | null }) {
   return (
     <Page title={props.verifyUrl ? "Sign in — hi.new" : "Link unavailable — hi.new"}>
       <div className="profile-card">
         <h1 style={{ fontSize: "30px", marginBottom: "12px" }}>
-          {props.verifyUrl ? "Open your dashboard?" : "Link unavailable"}
+          {props.verifyUrl ? (props.next ? "Continue to hi.new?" : "Open your dashboard?") : "Link unavailable"}
         </h1>
         <p style={{ marginTop: "0" }}>
           {props.verifyUrl
@@ -289,9 +291,9 @@ export function OwnerConfirmPage(props: { verifyUrl: string | null }) {
         </p>
         <div className="cta-row">
           {props.verifyUrl ? (
-            <a className="btn" href={props.verifyUrl}>Continue to dashboard</a>
+            <a className="btn" href={props.verifyUrl}>{props.next ? "Continue" : "Continue to dashboard"}</a>
           ) : (
-            <a className="btn" href="/owner">Start over</a>
+            <a className="btn" href={props.next ? `/owner?next=${encodeURIComponent(props.next)}` : "/owner"}>Start over</a>
           )}
         </div>
       </div>

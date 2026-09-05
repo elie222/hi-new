@@ -41,9 +41,9 @@ const faqs: Faq[] = [
   {
     question: "What happens if the token is lost?",
     answer: [
-      "Recover it. Add an owner email after claiming (your bot can attach it any time) and click the verification link; from then on ",
+      "Website claims are attached to your account. Use ",
       { href: "/recover", label: "hi.new/recover" },
-      " can issue a fresh token and kill the old one. Names with no verified email are released after 7 days.",
+      " to replace a lost token. Agent claims need a verified owner email within 7 days.",
     ],
   },
   {
@@ -709,26 +709,30 @@ const faqText = (answer: FaqPart[]) =>
       });
 
       // Remember referral attribution for 30 days.
-      const refParam = new URLSearchParams(location.search).get("ref");
-      if (refParam && /^[a-z0-9-]{2,32}$/.test(refParam.toLowerCase())) {
-        localStorage.setItem("hi_ref", refParam.toLowerCase());
-        localStorage.setItem("hi_ref_at", String(Date.now()));
+      const searchParams = new URLSearchParams(location.search);
+      const rawRef = searchParams.get("ref")?.toLowerCase();
+      const refParam = rawRef && /^[a-z0-9][a-z0-9-]{1,31}$/.test(rawRef) ? rawRef : null;
+      if (refParam) {
+        try {
+          localStorage.setItem("hi_ref", refParam.toLowerCase());
+          localStorage.setItem("hi_ref_at", String(Date.now()));
+        } catch {}
       }
-      const linkParam = new URLSearchParams(location.search).get("link");
-      const fromParam = new URLSearchParams(location.search).get("from");
+      const linkParam = searchParams.get("link");
+      const fromParam = searchParams.get("from");
       const inviteLink = linkParam && /^hni_[\w-]+$/.test(linkParam) ? linkParam : null;
       const inviteFrom = fromParam && /^[a-z0-9][a-z0-9-]{1,31}$/.test(fromParam.toLowerCase()) ? fromParam.toLowerCase() : null;
       function getRef(): string | null {
-        const at = Number(localStorage.getItem("hi_ref_at") || 0);
-        if (Date.now() - at > 30 * 86400 * 1000) return null;
-        return localStorage.getItem("hi_ref");
+        try {
+          const at = Number(localStorage.getItem("hi_ref_at") || 0);
+          if (Date.now() - at > 30 * 86400 * 1000) return null;
+          return localStorage.getItem("hi_ref");
+        } catch { return null; }
       }
 
       // Price the name immediately with the same rules as the API. Availability
       // remains server-authoritative and is checked when the user submits.
-      let currentPrice: number | null = null;
       function setPrice(price: number | null, name: string) {
-        currentPrice = price;
         claimBtn.textContent = price ? "Claim ($" + price + "/yr)" : "Claim";
         statusEl.style.color = "";
         if (!price) statusEl.textContent = "";
@@ -756,21 +760,35 @@ const faqText = (answer: FaqPart[]) =>
       claimBtn.addEventListener("click", async () => {
         const h = input.value.trim().toLowerCase();
         if (!h) { input.focus(); return; }
-        track("claim_started", { source: "landing", paid: Boolean(currentPrice) });
+        const nameCheck = checkName(h);
+        if (!nameCheck.ok) { setStatus(nameCheck.error, "#C94244"); return; }
+        const paid = nameCheck.priceCents > 0;
+        track("claim_started", { source: "landing", paid });
         const idleLabel = claimBtn.textContent;
         claimBtn.disabled = true;
-        claimBtn.textContent = currentPrice ? "Reserving…" : "Claiming…";
+        claimBtn.textContent = paid ? "Reserving…" : "Claiming…";
         try {
+          const ref = refParam || getRef();
+          const resume = new URLSearchParams({ claim: h });
+          if (ref && ref !== h) resume.set("ref", ref);
+          if (inviteLink && inviteFrom) {
+            resume.set("link", inviteLink);
+            resume.set("from", inviteFrom);
+          }
+          const signInUrl = "/owner?next=" + encodeURIComponent("/?" + resume);
+          const who = await fetch("/api/owner/session", { cache: "no-store" }).then((r) => r.json());
+          if (!who.email) { location.href = signInUrl; return; }
           let pending;
           try { pending = prepareClaim(h); }
           catch { setStatus("Enable browser storage before claiming a name.", "#C94244"); return; }
-          const ref = getRef();
-          const res = await fetch("/api/handles", {
+          const res = await fetch("/api/owner/claims", {
             method: "POST",
             headers: { "content-type": "application/json", "x-hi-new-claim-token": pending.token },
             body: JSON.stringify({ name: h, ...(ref && ref !== h ? { ref } : {}) }),
           });
           const data = await res.json();
+          if (res.status === 401) { location.href = signInUrl; return; }
+          if (res.ok && data.owner_url) { location.href = data.owner_url; return; }
           if (res.status === 201 || res.status === 402) {
             track("claim_created", { source: "landing", paid: res.status === 402 });
             try { sessionStorage.setItem(
@@ -803,7 +821,7 @@ const faqText = (answer: FaqPart[]) =>
               return;
             }
             setStatus(cod.hint || cod.error || "checkout isn't available right now", "#C94244");
-          } else if (res.status === 409 && data.error === "name_taken") {
+          } else if (res.status === 409 && (data.error === "name_taken" || data.error === "name_reserved")) {
             setStatus("hi.new/" + h + " is taken, try another", "#C94244");
           } else if (data.error === "email_name_limit") {
             setStatus("This email already has " + data.limit + " free names.", "#C94244");
@@ -817,6 +835,13 @@ const faqText = (answer: FaqPart[]) =>
           claimBtn.textContent = idleLabel;
         }
       });
+
+      const resumedName = searchParams.get("claim");
+      if (resumedName && checkName(resumedName).ok) {
+        input.value = resumedName;
+        input.dispatchEvent(new Event("input"));
+        claimBtn.click();
+      }
 
       const ticker = document.getElementById("ticker")!;
       const tickerList = document.getElementById("ticker-list")!;

@@ -121,44 +121,13 @@ export function UnclaimedPage(props: { name: string; priceCents: number; origin:
   const price = priceCents > 0 ? `$${(priceCents / 100).toLocaleString()}/yr` : "free";
   const buttonLabel = priceCents > 0 ? `Claim it for ${price}` : "Claim it free";
   const claimScript = `(function(){
-var btn=document.getElementById("claim-here"),err=document.getElementById("claim-err");
-btn.addEventListener("click",async function(){
-  window.hiTrack?.("claim_started",{source:"profile",paid:${priceCents > 0}});
-  btn.disabled=true;btn.textContent="Claiming…";
+document.getElementById("claim-here").addEventListener("click",function(){
+  var next=new URLSearchParams({claim:${JSON.stringify(name)}});
   try{
-    var ref=null;
-    try{
-      var at=Number(localStorage.getItem("hi_ref_at")||0);
-      if(Date.now()-at<30*86400*1000)ref=localStorage.getItem("hi_ref");
-    }catch(e){}
-    var body={name:${JSON.stringify(name)}};
-    if(ref&&ref!==body.name)body.ref=ref;
-    var saved=null;
-    try{saved=JSON.parse(sessionStorage.getItem("hi_claim")||"null")}catch(e){}
-    var claimToken=saved&&saved.name===body.name?saved.token:"hn_"+btoa(String.fromCharCode.apply(null,crypto.getRandomValues(new Uint8Array(32)))).split("+").join("-").split("/").join("_").split("=").join("");
-    try{sessionStorage.setItem("hi_claim",JSON.stringify({name:body.name,token:claimToken}))}catch(e){err.textContent="Enable browser storage before claiming a name.";btn.disabled=false;btn.textContent=${JSON.stringify(buttonLabel)};return;}
-    var res=await fetch("/api/handles",{method:"POST",headers:{"content-type":"application/json","x-hi-new-claim-token":claimToken},body:JSON.stringify(body)});
-    var data=await res.json();
-    if(res.status===201||res.status===402){
-      window.hiTrack?.("claim_created",{source:"profile",paid:res.status===402});
-      try{sessionStorage.setItem("hi_claim",JSON.stringify({name:data.name,token:data.token,paid:res.status===402,price_usd_per_year:data.price_usd_per_year,checkout_url:data.checkout_url}))}catch(e){err.textContent="Claim succeeded. Save this token before leaving: "+data.token;btn.disabled=false;btn.textContent=${JSON.stringify(buttonLabel)};return;}
-      if(res.status===201){location.href="/"+encodeURIComponent(data.name)+"/setup";return;}
-      btn.textContent="Taking you to checkout…";
-      var co=await fetch("/buy/"+encodeURIComponent(data.name)+"/checkout",{method:"POST",headers:{accept:"application/json","x-hi-new-claim-token":data.token}});
-      var cod=await co.json();
-      if(co.ok&&cod.url){window.hiTrack?.("checkout_started",{source:"profile"});location.href=cod.url;return;}
-      err.textContent=cod.hint||cod.error||"Checkout isn't available right now.";
-    }else if(res.status===409&&data.error==="name_taken"){
-      err.textContent="Someone just took it.";
-    }else if(data.error==="email_name_limit"){
-      err.textContent="This email already has "+data.limit+" free names.";
-    }else{
-      err.textContent=data.hint||data.error||"Something went wrong.";
-    }
-    btn.disabled=false;btn.textContent=${JSON.stringify(buttonLabel)};
-    return;
-  }catch(e){err.textContent="Network error. Try again."}
-  btn.disabled=false;btn.textContent=${JSON.stringify(buttonLabel)};
+    var ref=localStorage.getItem("hi_ref"),at=Number(localStorage.getItem("hi_ref_at")||0);
+    if(ref&&Date.now()-at<30*86400*1000)next.set("ref",ref);
+  }catch(e){}
+  location.href="/?"+next;
 });
 })();`;
   return (
@@ -175,7 +144,6 @@ btn.addEventListener("click",async function(){
         <div className="cta-row" style={{ marginTop: "24px" }}>
           <button id="claim-here" className="btn">{buttonLabel}</button>
         </div>
-        <div id="claim-err" className="quiet" style={{ marginTop: "10px" }}></div>
       </div>
       <script dangerouslySetInnerHTML={{ __html: claimScript }} />
     </Page>
