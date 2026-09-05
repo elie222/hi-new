@@ -124,7 +124,7 @@ export function createApp(overrides?: {
 }) {
   const app = new Hono<AppEnv>();
 
-  app.all("/r/*", (c) => proxyAnalytics(c.req.raw));
+  app.all("/__h/*", (c) => proxyAnalytics(c.req.raw));
 
   // www.<host> -> <host>: owner auth only trusts APP_ORIGIN, so forms and
   // cookies must live on the apex.

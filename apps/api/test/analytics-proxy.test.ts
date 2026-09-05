@@ -4,7 +4,7 @@ import { proxyAnalytics } from "../src/lib/analytics-proxy";
 
 test("forwards event bytes and trusted IP without application credentials", async () => {
   const payload = new Uint8Array([31, 139, 8, 0, 255]);
-  const response = await proxyAnalytics(new Request("https://hi.new/r/e/?compression=gzip-js", {
+  const response = await proxyAnalytics(new Request("https://hi.new/__h/e/?compression=gzip-js", {
     method: "POST",
     headers: {
       "content-type": "application/octet-stream",
@@ -34,7 +34,7 @@ test("forwards event bytes and trusted IP without application credentials", asyn
 
 test("routes SDK assets and configuration to the asset host", async () => {
   for (const path of ["/static/array.js", "/array/test-project/config"]) {
-    const response = await proxyAnalytics(new Request("https://hi.new/r" + path), async (upstream) => {
+    const response = await proxyAnalytics(new Request("https://hi.new/__h" + path), async (upstream) => {
       expect(upstream.url).toBe("https://us-assets.i.posthog.com" + path);
       return new Response("asset", { headers: { "cache-control": "public, max-age=300" } });
     });
@@ -45,13 +45,13 @@ test("routes SDK assets and configuration to the asset host", async () => {
 
 test("rejects unsupported paths and methods before database middleware", async () => {
   const app = createApp();
-  expect((await app.request("https://hi.new/r/private")).status).toBe(404);
-  expect((await app.request("https://hi.new/r/e/", { method: "DELETE" })).status).toBe(405);
-  expect((await app.request("https://hi.new/r/static/array.js", { method: "POST" })).status).toBe(405);
+  expect((await app.request("https://hi.new/__h/private")).status).toBe(404);
+  expect((await app.request("https://hi.new/__h/e/", { method: "DELETE" })).status).toBe(405);
+  expect((await app.request("https://hi.new/__h/static/array.js", { method: "POST" })).status).toBe(405);
 });
 
 test("preserves ingestion errors but contains upstream failures and redirects", async () => {
-  const request = new Request("https://hi.new/r/e/");
+  const request = new Request("https://hi.new/__h/e/");
   const rejected = await proxyAnalytics(request, async () => new Response("rate limited", { status: 429 }));
   expect(rejected.status).toBe(429);
   expect(await rejected.text()).toBe("rate limited");

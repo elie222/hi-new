@@ -3,7 +3,7 @@ export async function proxyAnalytics(
   send: (request: Request) => Promise<Response> = fetch,
 ): Promise<Response> {
   const incoming = new URL(request.url);
-  const path = incoming.pathname.slice("/r".length);
+  const path = incoming.pathname.slice("/__h".length);
   const asset = path.startsWith("/static/") || path.startsWith("/array/");
   if (!asset && !["/e/", "/batch/", "/i/v0/e/", "/flags/"].includes(path)) {
     return new Response(null, { status: 404 });

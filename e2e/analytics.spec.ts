@@ -16,7 +16,7 @@ test("analytics scrubs secrets, queues early events, and retains the browser ide
     directRequests.push(route.request().url());
     return route.abort();
   });
-  await page.route("https://hi.new/r/**", async (route) => {
+  await page.route("https://hi.new/__h/**", async (route) => {
     requests.push(route.request().url());
     const body = route.request().postDataBuffer();
     if (body && new URL(route.request().url()).pathname.endsWith("/e/")) {
@@ -29,7 +29,7 @@ test("analytics scrubs secrets, queues early events, and retains the browser ide
     await route.fulfill({ json: {} });
   });
   await page.route("https://hi.new/**", async (route) => {
-    if (new URL(route.request().url()).pathname.startsWith("/r/")) return route.fallback();
+    if (new URL(route.request().url()).pathname.startsWith("/__h/")) return route.fallback();
     if (new URL(route.request().url()).pathname === "/site.js") {
       return route.fulfill({ path: resolve("apps/landing/dist/site.js"), contentType: "text/javascript" });
     }
@@ -73,7 +73,7 @@ test("analytics scrubs secrets, queues early events, and retains the browser ide
 test("local and staging pages do not contact PostHog", async ({ page }) => {
   const requests: string[] = [];
   page.on("request", (request) => {
-    if (request.url().includes("posthog.com") || new URL(request.url()).pathname.startsWith("/r/")) requests.push(request.url());
+    if (request.url().includes("posthog.com") || new URL(request.url()).pathname.startsWith("/__h/")) requests.push(request.url());
   });
   await page.route("https://*.posthog.com/**", (route) => route.fulfill({ json: {} }));
   await page.goto("/");
