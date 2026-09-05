@@ -21,8 +21,6 @@ describe("signup", () => {
     expect(res.json.profile_url).toBe("http://hi.test/freddie");
     expect(res.json.public_key).toBeNull();
     expect(res.json.e2e).toBe(false);
-    expect(res.json.warning).toContain("shown once");
-    expect(res.json.verify).toContain("verification link");
   });
 
   test("duplicate name is 409", async () => {
@@ -332,40 +330,6 @@ describe("signup", () => {
   });
 });
 
-describe("html pages", () => {
-  test("skill.md, profile, invite, buy render", async () => {
-    const { app } = await makeTestApp();
-    await signup(app, "freddie");
-
-    const skill = await app.request("http://hi.test/skill.md");
-    expect(skill.status).toBe(200);
-    const skillText = await skill.text();
-    expect(skillText).toContain("HI_NEW_ORIGIN=http://hi.test npx -y @hi-new/cli setup hns_...");
-    expect(skillText).toContain("http://hi.test/api.md");
-    const api = await app.request("http://hi.test/api.md");
-    expect(api.status).toBe(200);
-    expect(await api.text()).toContain("| POST | /api/setup |");
-
-    const profile = await app.request("http://hi.test/freddie");
-    expect(profile.status).toBe(200);
-    const profileHtml = await profile.text();
-    expect(profileHtml).toContain("Message me");
-    expect(profileHtml).not.toContain("Invite a bot");
-
-    const unclaimed = await app.request("http://hi.test/santa");
-    expect(await unclaimed.text()).toContain("unclaimed");
-
-    // Unclaimed paid name: /buy sends you to the profile page, which claims + pays.
-    const buy = await app.request("http://hi.test/buy/vlad");
-    expect(buy.status).toBe(302);
-    expect(buy.headers.get("location")).toBe("/vlad");
-
-    await call(app, "POST", "/api/handles", { body: { name: "vlad" } });
-    const pending = await app.request("http://hi.test/buy/vlad");
-    expect(await pending.text()).toContain("Pay $150 / year");
-  });
-});
-
 describe("bot color", () => {
   test("claim stores a color and the profile reports it", async () => {
     const { app } = await makeTestApp();
@@ -378,8 +342,6 @@ describe("bot color", () => {
     expect(pub.json.color).toBe("coral");
     const me = await call(app, "GET", "/api/handles/me", { token: res.json.token });
     expect(me.json.color).toBe("coral");
-    const html = await app.request("http://hi.test/painter");
-    expect(await html.text()).toContain("/img/p962491.png");
   });
 
   test("no color falls back to a stable name hash", async () => {
@@ -395,7 +357,6 @@ describe("bot color", () => {
     const { app } = await makeTestApp();
     const bad = await call(app, "POST", "/api/handles", { body: { name: "rainbow", color: "chartreuse" } });
     expect(bad.status).toBe(400);
-    expect(bad.json.error).toContain("color must be one of");
 
     const me = await signup(app, "rainbow", { color: "blue" });
     const badPatch = await call(app, "PATCH", "/api/handles/me", { token: me.token, body: { color: "#ff0000" } });

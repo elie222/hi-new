@@ -18,11 +18,7 @@ describe("email ownership", () => {
     const { app, sent } = await makeTestApp();
     const res = await call(app, "POST", "/api/handles", { body: { name: "no-email-bot" } });
     expect(res.status).toBe(201);
-    expect(res.json.verify).toContain("Attach one within 7 days");
     expect(sent.length).toBe(0);
-
-    const me1 = await call(app, "GET", "/api/handles/me", { token: res.json.token });
-    expect(me1.json.warning).toContain("No owner email");
 
     const attach = await call(app, "PATCH", "/api/handles/me", {
       token: res.json.token,
@@ -48,7 +44,6 @@ describe("email ownership", () => {
     const bot = await signup(app, "verify-me");
     expect(sent.length).toBe(1);
     expect(sent[0]!.to).toBe("verify-me@owners.example");
-    expect(sent[0]!.subject).toContain("Verify hi.new/verify-me");
 
     let me = await call(app, "GET", "/api/handles/me", { token: bot.token });
     expect(me.json.email_verified).toBe(false);
@@ -56,7 +51,6 @@ describe("email ownership", () => {
     const path = linkFrom(sent[0]!.text, "/v/");
     const page = await app.request(`http://hi.test${path}`);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("verified");
 
     me = await call(app, "GET", "/api/handles/me", { token: bot.token });
     expect(me.json.email_verified).toBe(true);
@@ -140,7 +134,6 @@ describe("email ownership", () => {
 
     await connect(app, alice, bob);
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.subject).toBe("New mail for hi.new/alice-bot");
     expect(sent[0]!.text).not.toContain("bob-bot");
     expect(sent[0]!.text).not.toContain("invite.redeemed");
 

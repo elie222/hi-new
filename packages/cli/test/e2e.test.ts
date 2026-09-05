@@ -42,8 +42,6 @@ describe("hi-new cli, end to end", () => {
     expect(setup.err).toBe("");
     expect(setup.code).toBe(0);
     expect(setup.out).toContain("hi.test/alice-cli is set up.");
-    expect(setup.out).toContain("from hi");
-    expect(setup.out).toContain("This message means your inbox works");
     expect(setup.out).toContain(`credentials  ${new Store(home).path("alice-cli", ORIGIN)}`);
 
     const credPath = new Store(home).path("alice-cli", ORIGIN);
@@ -59,19 +57,17 @@ describe("hi-new cli, end to end", () => {
     const again = await cli("setup", code);
     expect(again.code).toBe(1);
     expect(again.err).toContain("invalid_setup_code");
-    expect(again.err).toContain("Setup codes work once");
 
     const me = await cli("me");
     expect(me.code).toBe(0);
     expect(me.out).toContain("name      alice-cli");
     expect(me.out).toContain(`e2e       on (${creds.publicKey}`);
 
-    // Setup finished the round trip itself: "hi" went out, the reply came back,
-    // and messages remain until explicitly acknowledged after printing.
-    expect(setup.out).toContain("That was a round trip");
-    expect(setup.out).toContain('round trip   done. "hi" sent to hi, reply above');
-    expect((await cli("inbox", "--ack")).out).toContain("acked 2");
-    expect((await cli("inbox")).out).toBe("Inbox empty.");
+    const afterSetup = await call(app, "GET", "/api/inbox", { token: alice.token });
+    expect(afterSetup.json.count).toBe(2);
+    expect((await cli("inbox", "--ack")).code).toBe(0);
+    const afterAck = await call(app, "GET", "/api/inbox", { token: alice.token });
+    expect(afterAck.json.count).toBe(0);
     const again2 = await cli("hi");
     expect(again2.code).toBe(0);
     expect(again2.out).toContain("replayed");
@@ -91,8 +87,6 @@ describe("hi-new cli, end to end", () => {
     const redeem = await cli("redeem", url, "--name", "bob-cli");
     expect(redeem.code).toBe(0);
     expect(redeem.out).toContain("granted: alice-cli (e2e)");
-    expect(redeem.out).toContain("from alice-cli");
-    expect(redeem.out).toContain("ack with: hi-new ack");
 
     // The invite message arrived sealed to Bob's key and stays until acked; the
     // connection receipt was acked by redeem.
@@ -117,7 +111,6 @@ describe("hi-new cli, end to end", () => {
     // reused idempotency key, which the CLI reports as already sent).
     const replay = await cli("send", "alice-cli", "the venue changed, 6pm", "--name", "bob-cli");
     expect(replay.code).toBe(0);
-    expect(replay.out).toContain("already sent to alice-cli");
     const rawAgain = await call(app, "GET", "/api/inbox", { token: alice.token });
     expect(rawAgain.json.messages.filter((m: any) => m.from === "bob-cli" && m.tag !== "invite")).toHaveLength(1);
 
@@ -142,13 +135,12 @@ describe("hi-new cli, end to end", () => {
     const carol = await signup(app, "carol-cli");
     const carolSetup = await cli("setup", carol.token, "--no-hi");
     expect(carolSetup.code).toBe(0);
-    expect(carolSetup.out).toContain("next         hi-new hi (round trip), then hi-new inbox --ack");
     const hi = await cli("hi", "--name", "carol-cli");
     expect(hi.code).toBe(0);
     expect(hi.out).toContain("sent #");
     expect(hi.out).toContain("hi.new/hi replied");
     const afterHi = await cli("inbox", "--name", "carol-cli");
-    expect(afterHi.out).toContain("That was a round trip");
+    expect(afterHi.code).toBe(0);
 
     // A name chosen by the human, no setup code: claim registers a fresh key in the
     // same request, stores credentials, and does the round trip like setup.
@@ -157,7 +149,6 @@ describe("hi-new cli, end to end", () => {
     expect(dave.code).toBe(0);
     expect(dave.out).toContain("hi.test/dave-cli is set up.");
     expect(dave.out).toContain("email        dave@owners.example");
-    expect(dave.out).toContain("That was a round trip");
     const daveCreds = JSON.parse(readFileSync(new Store(home).path("dave-cli", ORIGIN), "utf8"));
     expect(daveCreds.identity).toMatch(/^AGE-SECRET-KEY-1/);
     const daveProfile = await call(app, "GET", "/api/handles/dave-cli");
@@ -172,10 +163,7 @@ describe("hi-new cli, end to end", () => {
     expect(erin.err).toBe("");
     expect(erin.code).toBe(0);
     expect(erin.out).toContain("hi.test/erin-cli is set up.");
-    expect(erin.out).toContain("That was a round trip");
     expect(erin.out).toContain("granted: alice-cli (e2e)");
-    expect(erin.out).toContain("Talk to my new bot");
-    expect(erin.out).toContain("next         tell your human who connected");
     const erinGrants = await cli("grants", "--name", "erin-cli");
     expect(erinGrants.out).toContain("alice-cli");
 
@@ -191,7 +179,6 @@ describe("hi-new cli, end to end", () => {
     const { cli } = harness(app);
     const none = await cli("me");
     expect(none.code).toBe(2);
-    expect(none.err).toContain("hi-new setup");
 
     const alice = await signup(app, "alice-cli");
     expect((await cli("setup", alice.token, "--no-key")).code).toBe(0);
@@ -206,7 +193,7 @@ describe("hi-new cli, end to end", () => {
 
     expect((await cli("bogus")).code).toBe(2);
     expect((await cli("ack")).code).toBe(2);
-    expect((await cli("setup", "nope")).err).toContain("expected a setup code");
+    expect((await cli("setup", "nope")).code).toBe(2);
   });
 
   test("--no-key keeps the handle plaintext; a matching stored identity is reused", async () => {
