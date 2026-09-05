@@ -6,7 +6,7 @@ import { defineConfig } from "astro/config";
 // under Astro's HMR server. Astro keeps its own pages (/, /connect, /profile, /setup)
 // and assets; the Worker handles the API, checkout, invites, and skill.md.
 const worker = "http://localhost:8787";
-const workerPaths = ["/api", "/buy", "/i/", "/g/", "/skill.md", "/owner", "/recover", "/mcp"];
+const workerPaths = ["/api", "/buy", "/i/", "/g/", "/__h/", "/skill.md", "/owner", "/recover", "/mcp"];
 
 export default defineConfig({
   site: "https://hi.new",
