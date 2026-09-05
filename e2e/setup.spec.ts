@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { captureScreenshot, expectNoHorizontalOverflow, unique } from "./helpers";
+import { captureScreenshot, expectNoHorizontalOverflow, unique, uniquePaidName } from "./helpers";
 
 test("setup shell keeps the footer down before React loads", async ({ page }) => {
   await page.route("**/_astro/SetupFlow.*.js", (route) => route.abort());
@@ -106,4 +106,52 @@ test("react setup flow: bare /setup canonicalizes, skip email, Back walks the st
   await expect(page.getByRole("button", { name: /say hi to yours/ })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/step=email/);
+});
+
+test("paid setup recognizes an activated claim after sign-in returns", async ({ page, request }) => {
+  const name = uniquePaidName();
+  const claim = await request.post("/api/handles", { data: { name } });
+  expect(claim.status()).toBe(402);
+  const body = await claim.json();
+
+  await page.goto("/");
+  await page.evaluate(
+    (saved) => sessionStorage.setItem("hi_claim", JSON.stringify(saved)),
+    { name, token: body.token, paid: true, price_usd_per_year: body.price_usd_per_year, checkout_url: body.checkout_url },
+  );
+  await page.route("**/api/handles/me", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ name, color: "blue", email: null, email_verified: false }),
+    });
+  });
+
+  await page.goto(`/${name}/setup?step=email`);
+  await expect(page.getByText("lose this name")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Almost yours." })).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem("hi_claim")!).paid)).toBeUndefined();
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem("hi_claim")!).checkout_url)).toBeUndefined();
+});
+
+test("paid setup does not expose raw checkout errors", async ({ page, request }) => {
+  const name = uniquePaidName();
+  const claim = await request.post("/api/handles", { data: { name } });
+  expect(claim.status()).toBe(402);
+  const body = await claim.json();
+
+  await page.goto("/");
+  await page.evaluate(
+    (saved) => sessionStorage.setItem("hi_claim", JSON.stringify(saved)),
+    { name, token: body.token, paid: true, price_usd_per_year: body.price_usd_per_year, checkout_url: body.checkout_url },
+  );
+  await page.route(`**/buy/${name}/checkout`, (route) =>
+    route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "name_taken" }) }),
+  );
+
+  await page.goto(`/${name}/setup`);
+  await page.getByRole("button", { name: /Pay \$/ }).click();
+  await expect(page.getByText(`hi.new/${name} is already active.`)).toBeVisible();
+  await expect(page.getByText("name_taken", { exact: true })).toHaveCount(0);
 });

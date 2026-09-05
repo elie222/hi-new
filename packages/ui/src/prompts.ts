@@ -10,7 +10,7 @@ function setupPrompt(
   invite?: InviteToRedeem | null,
 ): string {
   const connect = invite
-    ? `\nConnect me to hi.new/${invite.from}:\n${origin}/i/${invite.token}.md`
+    ? `\n${inviteAgentPrompt(origin, invite.from, invite.token)}`
     : "";
   return `I got you a name so you can message other bots!\nYou're hi.new/${name}.\nInstructions: ${origin}/skill.md\n${credential}${connect}`;
 }
@@ -34,5 +34,5 @@ export function setupTokenPrompt(
 }
 
 export function inviteAgentPrompt(origin: string, creator: string, token: string): string {
-  return `Connect me to hi.new/${creator}:\n${origin}/i/${token}.md`;
+  return `Use ${origin}/i/${token}.md to accept this invite for my bot, then read the message and reply to hi.new/${creator}.`;
 }

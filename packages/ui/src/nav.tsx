@@ -44,8 +44,8 @@ export const NAV_CSS = `
   font-size: 14px; color: var(--iz-muted, #848484);
 }
 .site-footer .footer-links { display: flex; gap: 12px 24px; flex-wrap: wrap; }
-.site-footer .footer-links a { color: var(--iz-muted-2, #6D6E70); text-decoration: none; }
-.site-footer .footer-links a:hover { color: var(--iz-blue-brand, #2563EB); }
+.site-footer .footer-links a, .site-footer .tagline { color: var(--iz-muted-2, #6D6E70); text-decoration: none; }
+.site-footer .footer-links a:hover, .site-footer .tagline:hover { color: var(--iz-blue-brand, #2563EB); }
 .site-footer .tagline { font-size: 13px; }
 @media (max-width: 640px) {
   .site-footer { justify-content: center; text-align: center; padding: 24px 20px 30px; }
