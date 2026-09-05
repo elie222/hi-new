@@ -1,0 +1,69 @@
+name: Publish e2e gallery
+
+# workflow_run loads this workflow from the default branch on a fresh runner.
+# Never check out the triggering PR or execute files from its artifact.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: publish-e2e-gallery
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted publication script
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          persist-credentials: false
+          path: trusted
+          sparse-checkout: scripts/publish-e2e-gallery.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Download gallery as data
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: playwright-artifacts-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+          path: artifacts
+
+      - name: Reject symbolic links
+        run: |
+          if [[ -n "$(find artifacts -type l -print -quit)" ]]; then
+            echo "::error::Gallery artifacts must not contain symbolic links."
+            exit 1
+          fi
+
+      - name: Publish screenshot gallery to Hetzner S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ vars.S3_REGION }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
+          S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
+          PLAYWRIGHT_PUBLIC_BASE_URL: ${{ vars.PLAYWRIGHT_PUBLIC_BASE_URL }}
+          PLAYWRIGHT_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          PLAYWRIGHT_RUN_ID: ${{ github.event.workflow_run.id }}
+          E2E_GALLERY_DIR: artifacts/.e2e-gallery
+          PLAYWRIGHT_REPORT_DIR: artifacts/playwright-report
+        run: |
+          if [[ -z "$AWS_ACCESS_KEY_ID" || -z "$AWS_SECRET_ACCESS_KEY" || -z "$S3_BUCKET" || -z "$S3_ENDPOINT" || -z "$PLAYWRIGHT_PUBLIC_BASE_URL" ]]; then
+            echo "::warning::S3 screenshot publication is not configured; the GitHub artifact still contains the complete gallery."
+            exit 0
+          fi
+          bash trusted/scripts/publish-e2e-gallery.sh

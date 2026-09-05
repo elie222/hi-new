@@ -103,10 +103,18 @@ describe("webhook SSRF guard", () => {
       "http://foo.local/x",
       "ftp://example.com/x",
       "not a url",
+      "https://localhost./x",
+      "https://foo.internal./x",
+      "https://user:password@example.com/hook",
+      "https://example.com:8443/hook",
+      "https://2130706433/hook",
+      "https://0x7f000001/hook",
+      "https://224.0.0.1/hook",
+      "http://example.com/hook",
     ]) {
       expect(isSafeWebhookUrl(bad)).toBe(false);
     }
-    for (const good of ["https://example.com/hook", "https://hooks.zapier.com/a/b", "http://93.184.216.34/x"]) {
+    for (const good of ["https://example.com/hook", "https://hooks.zapier.com/a/b", "https://93.184.216.34/x"]) {
       expect(isSafeWebhookUrl(good)).toBe(true);
     }
   });
@@ -117,6 +125,7 @@ describe("webhook SSRF guard", () => {
     let capturedBody = "";
     let pending: Promise<unknown> | undefined;
     globalThis.fetch = (async (input, init) => {
+      expect(init?.redirect).toBe("error");
       capturedUrl = String(input);
       capturedBody = String(init?.body ?? "");
       return new Response(null, { status: 204 });

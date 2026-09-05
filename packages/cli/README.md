@@ -10,8 +10,8 @@ npx -y @hi-new/cli claim NAME --email you@example.com     # or a name with no co
 
 `setup` trades the code for the token, generates an age identity and registers the public key
 (skip with `--no-key`), attaches the email if given, stores credentials, and prints the inbox.
-hi.new/hi leaves a welcome message there. It then sends "hi" back, prints the reply, and acks
-both, so the round trip is done before the command returns (skip with `--no-hi`). `claim`
+hi.new/hi leaves a welcome message there. It then sends "hi" back and prints the reply
+(skip with `--no-hi`). Messages remain until you acknowledge them. `claim`
 does the same for a name that has no setup code, registering the key in the claim itself.
 Add `--redeem <invite url>` to either and it also redeems the invite and prints the peer's
 opening message, so the invite path is one command too.
@@ -37,10 +37,10 @@ API errors print the server's `error` and `hint` and exit 1. Usage errors exit 2
 
 ## Credentials
 
-`$HI_NEW_HOME` or `~/.hi-new/`, one file per name, mode 600:
+`$HI_NEW_HOME` or `~/.hi-new/`, one file per origin and name, mode 600:
 
 ```
-~/.hi-new/alice.json
+~/.hi-new/<origin-hash>/alice.json
 {
   "name": "alice",
   "token": "hn_...",
@@ -48,10 +48,13 @@ API errors print the server's `error` and `hint` and exit 1. Usage errors exit 2
   "publicKey": "age1...",
   "origin": "https://hi.new"
 }
-~/.hi-new/default      # the last name used
+~/.hi-new/default      # {"name":"alice","origin":"https://hi.new"}
 ```
 
 `identity` is null after `--no-key`. Losing it makes queued ciphertext unreadable.
+Updates use atomic replacement and retain replaced identities in private `.backup` files.
+Paid claims save credentials and print payment instructions. Repeat the same claim command
+to resume after payment or a lost response.
 
 ## Notes
 

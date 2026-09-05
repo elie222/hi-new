@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call, makeTestApp, signup, type TestApp } from "../../../apps/api/test/helpers";
 import { run } from "../src/cli";
+import { Store } from "../src/store";
 
 const ORIGIN = "http://hi.test";
 
@@ -43,15 +44,15 @@ describe("hi-new cli, end to end", () => {
     expect(setup.out).toContain("hi.test/alice-cli is set up.");
     expect(setup.out).toContain("from hi");
     expect(setup.out).toContain("This message means your inbox works");
-    expect(setup.out).toContain(`credentials  ${join(home, "alice-cli.json")}`);
+    expect(setup.out).toContain(`credentials  ${new Store(home).path("alice-cli", ORIGIN)}`);
 
-    const credPath = join(home, "alice-cli.json");
+    const credPath = new Store(home).path("alice-cli", ORIGIN);
     expect(statSync(credPath).mode & 0o777).toBe(0o600);
     const creds = JSON.parse(readFileSync(credPath, "utf8"));
     expect(creds).toMatchObject({ name: "alice-cli", token: alice.token, origin: ORIGIN });
     expect(creds.identity).toMatch(/^AGE-SECRET-KEY-1/);
     expect(creds.publicKey).toMatch(/^age1/);
-    expect(readFileSync(join(home, "default"), "utf8").trim()).toBe("alice-cli");
+    expect(new Store(home).defaultSelection()).toEqual({ name: "alice-cli", origin: ORIGIN });
 
     const profile = await call(app, "GET", "/api/handles/alice-cli");
     expect(profile.json.public_key).toBe(creds.publicKey);
@@ -66,9 +67,10 @@ describe("hi-new cli, end to end", () => {
     expect(me.out).toContain(`e2e       on (${creds.publicKey}`);
 
     // Setup finished the round trip itself: "hi" went out, the reply came back,
-    // and both the welcome and the reply were acked. Nothing is left to read.
+    // and messages remain until explicitly acknowledged after printing.
     expect(setup.out).toContain("That was a round trip");
-    expect(setup.out).toContain('round trip   done. "hi" sent to hi, reply above, 2 messages acked');
+    expect(setup.out).toContain('round trip   done. "hi" sent to hi, reply above');
+    expect((await cli("inbox", "--ack")).out).toContain("acked 2");
     expect((await cli("inbox")).out).toBe("Inbox empty.");
     const again2 = await cli("hi");
     expect(again2.code).toBe(0);
@@ -78,8 +80,8 @@ describe("hi-new cli, end to end", () => {
     const bobSetup = await cli("setup", bob.token, "--email", "bob@owners.example");
     expect(bobSetup.code).toBe(0);
     expect(bobSetup.out).toContain("email        bob@owners.example");
-    expect(readFileSync(join(home, "default"), "utf8").trim()).toBe("bob-cli");
-    const bobCreds = JSON.parse(readFileSync(join(home, "bob-cli.json"), "utf8"));
+    expect(new Store(home).defaultSelection()).toEqual({ name: "bob-cli", origin: ORIGIN });
+    const bobCreds = JSON.parse(readFileSync(new Store(home).path("bob-cli", ORIGIN), "utf8"));
     expect(bobCreds.publicKey).toMatch(/^age1/);
 
     const invite = await cli("invite", "--name", "alice-cli", "--message", "swap the best thing you learned");
@@ -156,13 +158,13 @@ describe("hi-new cli, end to end", () => {
     expect(dave.out).toContain("hi.test/dave-cli is set up.");
     expect(dave.out).toContain("email        dave@owners.example");
     expect(dave.out).toContain("That was a round trip");
-    const daveCreds = JSON.parse(readFileSync(join(home, "dave-cli.json"), "utf8"));
+    const daveCreds = JSON.parse(readFileSync(new Store(home).path("dave-cli", ORIGIN), "utf8"));
     expect(daveCreds.identity).toMatch(/^AGE-SECRET-KEY-1/);
     const daveProfile = await call(app, "GET", "/api/handles/dave-cli");
     expect(daveProfile.json.public_key).toBe(daveCreds.publicKey);
-    const taken = await cli("claim", "dave-cli");
-    expect(taken.code).toBe(1);
-    expect(taken.err).toContain("taken");
+    const resumed = await cli("claim", "dave-cli", "--email", "dave@owners.example");
+    expect(resumed.code).toBe(0);
+    expect(resumed.err).toBe("");
 
     const inv2 = await cli("invite", "--message", "Talk to my new bot", "--name", "alice-cli");
     const url2 = inv2.out.split("\n")[0]!;
@@ -218,10 +220,10 @@ describe("hi-new cli, end to end", () => {
 
     // Second setup adds a key; a third reuses it rather than rotating.
     expect((await cli("setup", alice.token)).out).toContain("e2e          on");
-    const key = JSON.parse(readFileSync(join(home, "alice-cli.json"), "utf8")).publicKey;
+    const key = JSON.parse(readFileSync(new Store(home).path("alice-cli", ORIGIN), "utf8")).publicKey;
     const third = await cli("setup", alice.token);
     expect(third.out).not.toContain("Replaced the key");
-    expect(JSON.parse(readFileSync(join(home, "alice-cli.json"), "utf8")).publicKey).toBe(key);
+    expect(JSON.parse(readFileSync(new Store(home).path("alice-cli", ORIGIN), "utf8")).publicKey).toBe(key);
     expect((await call(app, "GET", "/api/handles/alice-cli")).json.public_key).toBe(key);
   });
 });

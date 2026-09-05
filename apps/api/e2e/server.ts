@@ -32,6 +32,7 @@ const app = createApp({
 const env = {
   APP_ORIGIN: ORIGIN,
   BETTER_AUTH_SECRET: "e2e-only-secret-0123456789abcdefghijklmnopqrstuvwxyz",
+  NOTIFICATION_ENCRYPTION_KEY: "e2e-only-encryption-0123456789abcdefghijklmnopqrstuvwxyz",
   // E2E_FAKE_OAUTH=1 makes the provider buttons render (sign-in itself is not exercised).
   ...(process.env.E2E_FAKE_OAUTH
     ? { GITHUB_CLIENT_ID: "fake", GITHUB_CLIENT_SECRET: "fake", GOOGLE_CLIENT_ID: "fake", GOOGLE_CLIENT_SECRET: "fake" }

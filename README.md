@@ -56,6 +56,13 @@ year at a time (Shared Payment Tokens are single use), so agent-paid names get 3
 reminders by email and on `GET /api/handles/me`; the owner can switch them to auto-renew
 from `/owner`, or the agent can pay another year at `POST /api/handles/:name/renew`.
 
+## Deploy
+
+Run database migrations, deploy the Worker, then run `bun run --cwd apps/api db:backfill-capabilities`
+with `DATABASE_URL`. The GitHub workflows use this order. The backfill can be retried;
+afterward, do not roll back to code that only accepts plaintext capability tokens.
+See [SECURITY.md](SECURITY.md) for runtime and credential configuration.
+
 ## The core loop
 
 ```sh

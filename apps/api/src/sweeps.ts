@@ -2,6 +2,7 @@ import { and, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-or
 import type { Db } from "./db/client";
 import { renewalEmailText, type SendEmail } from "./lib/email";
 import { daysLeft, RENEWAL_NOTICE_DAYS, shortDate } from "./lib/renewal";
+import { sha256Hex } from "./lib/tokens";
 import {
   EMAIL_ERA,
   FREE_IDLE_MS,
@@ -56,6 +57,9 @@ export async function hourlySweep(db: Db, now = new Date()): Promise<void> {
     .where(
       and(
         eq(handles.status, "pending"),
+        isNull(handles.stripeSubscriptionId),
+        isNull(handles.stripeCheckoutSessionId),
+        isNull(handles.stripeCheckoutKey),
         lt(handles.createdAt, new Date(now.getTime() - PENDING_HANDLE_TTL_MS)),
       ),
     );
@@ -97,16 +101,28 @@ export async function renewalNotices(db: Db, now: Date, notify: SweepNotify): Pr
     );
   let sent = 0;
   for (const handle of due) {
-    const left = daysLeft(handle.paidUntil!, now.getTime());
-    const stage = [...RENEWAL_NOTICE_DAYS].sort((a, b) => a - b).find((days) => left <= days);
-    if (!stage || (handle.stage !== 0 && handle.stage <= stage)) continue;
-    await db.update(handles).set({ renewalNoticeStage: stage }).where(eq(handles.id, handle.id));
-    if (!handle.email || !handle.emailVerifiedAt) continue;
-    await notify.sendEmail({
-      to: handle.email,
-      ...renewalEmailText(handle.name, Math.max(left, 0), shortDate(handle.paidUntil!), `${notify.origin}/owner`),
-    });
-    sent += 1;
+    try {
+      sent += await db.transaction(async (tx) => {
+        const [current] = await tx.select().from(handles).where(eq(handles.id, handle.id)).for("update");
+        if (!current?.paidUntil || !current.email || !current.emailVerifiedAt || current.stripeSubscriptionId) return 0;
+        const left = daysLeft(current.paidUntil, now.getTime());
+        const stage = [...RENEWAL_NOTICE_DAYS].sort((a, b) => a - b).find((days) => left <= days);
+        if (!stage || (current.renewalNoticeStage !== 0 && current.renewalNoticeStage <= stage)) return 0;
+        const mail = {
+          to: current.email,
+          ...renewalEmailText(current.name, Math.max(left, 0), shortDate(current.paidUntil), `${notify.origin}/owner`),
+        };
+        await notify.sendEmail({
+          ...mail,
+          idempotencyKey: `renewal:${current.id}:${stage}:${await sha256Hex(JSON.stringify(mail))}`,
+        });
+        await tx.update(handles).set({ renewalNoticeStage: stage }).where(eq(handles.id, current.id));
+        return 1;
+      });
+    } catch {
+      // Failed delivery remains eligible, and cannot abort other notices or cleanup.
+      console.error("renewal email delivery failed", handle.id);
+    }
   }
   return sent;
 }
@@ -122,6 +138,9 @@ export async function dailySweep(db: Db, now = new Date(), notify?: SweepNotify)
     .where(
       and(
         sql`${handles.emailVerifiedAt} is null`,
+        isNull(handles.stripeSubscriptionId),
+        isNull(handles.stripeCheckoutSessionId),
+        isNull(handles.stripeCheckoutKey),
         gt(handles.createdAt, EMAIL_ERA),
         lt(handles.createdAt, new Date(now.getTime() - VERIFY_WINDOW_MS)),
       ),
@@ -131,6 +150,9 @@ export async function dailySweep(db: Db, now = new Date(), notify?: SweepNotify)
     .where(
       and(
         eq(handles.tier, "free"),
+        isNull(handles.stripeSubscriptionId),
+        isNull(handles.stripeCheckoutSessionId),
+        isNull(handles.stripeCheckoutKey),
         lt(handles.lastActiveAt, new Date(now.getTime() - FREE_IDLE_MS)),
       ),
     );
@@ -140,6 +162,9 @@ export async function dailySweep(db: Db, now = new Date(), notify?: SweepNotify)
       and(
         eq(handles.tier, "paid"),
         eq(handles.status, "active"),
+        isNull(handles.stripeSubscriptionId),
+        isNull(handles.stripeCheckoutSessionId),
+        isNull(handles.stripeCheckoutKey),
         sql`${handles.paidUntil} is not null`,
         lt(handles.paidUntil, new Date(now.getTime() - PAID_GRACE_MS)),
       ),

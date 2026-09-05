@@ -116,7 +116,7 @@ const desktop = typeof navigator !== "undefined" && !/Android|iPhone|iPad|iPod/i
 
 export default function SetupFlow() {
   const [session, setSession] = useState<Session | null>(null);
-  const [mode, setMode] = useState<"flow" | "checking" | "unpaid" | "activating" | "botPaid">("flow");
+  const [mode, setMode] = useState<"flow" | "checking" | "unpaid" | "activating">("flow");
   const [payErr, setPayErr] = useState("");
   const [paying, setPaying] = useState(false);
   const [screen, setScreen] = useState<"boot" | "ceremony" | "paste" | "email" | "live">("boot");
@@ -130,6 +130,8 @@ export default function SetupFlow() {
   const [openedGrokBot, setOpenedGrokBot] = useState(false);
 
   const code = useRef<{ value: string; expires: number } | null>(null);
+  const codeRefresh = useRef<Promise<void> | null>(null);
+  const [refreshingCode, setRefreshingCode] = useState(false);
   const invitedBy = useRef<{ token: string; from: string } | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -156,15 +158,23 @@ export default function SetupFlow() {
 
   // The prompt carries a one-time setup code the bot trades for the token,
   // so the transcript only ever holds a credential that dies in 15 minutes.
-  async function refreshCode(s: Session) {
-    try {
-      const res = await fetch("/api/handles/me/setup-code", { method: "POST", headers: auth(s.token) });
-      if (res.ok) {
-        const data = await res.json();
-        code.current = { value: data.code, expires: Date.parse(data.expires_at) };
-      }
-    } catch { /* fall back to the raw token in the prompt */ }
-    setPrompt(buildPrompt(s.name, s.token));
+  function refreshCode(s: Session): Promise<void> {
+    if (codeRefresh.current) return codeRefresh.current;
+    setRefreshingCode(true);
+    codeRefresh.current = (async () => {
+      try {
+        const res = await fetch("/api/handles/me/setup-code", { method: "POST", headers: auth(s.token) });
+        if (res.ok) {
+          const data = await res.json();
+          code.current = { value: data.code, expires: Date.parse(data.expires_at) };
+        }
+      } catch { /* keep the saved token available when code minting is unavailable */ }
+      setPrompt(buildPrompt(s.name, s.token));
+    })().finally(() => {
+      codeRefresh.current = null;
+      setRefreshingCode(false);
+    });
+    return codeRefresh.current;
   }
 
   useEffect(() => {
@@ -176,7 +186,7 @@ export default function SetupFlow() {
     const name = pathName ?? claim?.name ?? null;
     if (!name) return void location.replace("/");
     const token = claim && claim.name === name ? claim.token : null;
-    if (!token && !paidReturn) return void location.replace("/" + name);
+    if (!token) return void location.replace("/" + name);
     if (claim?.link && claim.from) invitedBy.current = { token: claim.link, from: claim.from };
     const s: Session = {
       name,
@@ -189,7 +199,8 @@ export default function SetupFlow() {
     const start = () => {
       // The ceremony plays once per name — tracked explicitly, so a reload
       // resumes at the paste step but a fresh claim always gets its moment.
-      const seen = sessionStorage.getItem("hi_setup_seen:" + name) === "1";
+      let seen = false;
+      try { seen = sessionStorage.getItem("hi_setup_seen:" + name) === "1"; } catch {}
       const step = readStep() ?? (seen ? "paste" : null);
       history.replaceState(null, "", "/" + name + "/setup" + (step ? "?step=" + step : ""));
       applyStep(step);
@@ -249,16 +260,15 @@ export default function SetupFlow() {
     if (!paidReturn) return void start();
 
     // Back from Stripe: the webhook may not have landed yet, so poll the
-    // public profile until the name reports active.
+    // authenticated profile until this claimant's name reports active.
     setMode("activating");
     history.replaceState(null, "", "/" + name + "/setup");
     const began = Date.now();
     const tick = async () => {
       try {
-        const res = await fetch("/api/handles/" + encodeURIComponent(name), { cache: "no-store" });
+        const res = await fetch("/api/handles/me", { headers: auth(token), cache: "no-store" });
         if (res.status === 200) {
           const profile = await res.json();
-          if (!token) return void setMode("botPaid");
           markClaimActive(name);
           if (isBotColor(claim?.color) && claim!.color !== profile.color) {
             fetch("/api/handles/me", {
@@ -272,7 +282,7 @@ export default function SetupFlow() {
         }
       } catch { /* keep polling */ }
       if (Date.now() - began < 90_000) setTimeout(tick, 1500);
-      else setPayErr("Payment received. Activation is taking longer than usual; refresh in a minute.");
+      else setPayErr("Activation is taking longer than usual. Refresh in a minute.");
     };
     tick();
   }, []);
@@ -316,7 +326,7 @@ export default function SetupFlow() {
     try {
       const res = await fetch("/buy/" + encodeURIComponent(name) + "/checkout", {
         method: "POST",
-        headers: { accept: "application/json" },
+        headers: { accept: "application/json", "x-hi-new-claim-token": token },
       });
       const data = await res.json();
       if (res.ok && data.url) return void (location.href = data.url);
@@ -383,10 +393,7 @@ export default function SetupFlow() {
         <Headline title="Almost yours." sub={<>hi.new/{name} is reserved for 24 hours. Pay to activate it, or pick a longer name for free.</>} />
       )}
       {mode === "checking" && <Headline title="Checking your name." sub={<>Confirming hi.new/{name}&hellip;</>} />}
-      {mode === "activating" && <Headline title="Payment received." sub={<>Activating hi.new/{name}&hellip;</>} />}
-      {mode === "botPaid" && (
-        <Headline title={<>It&rsquo;s yours.</>} sub="The token your bot got when it claimed the name is now active. Nothing else to do." />
-      )}
+      {mode === "activating" && <Headline title="Checking activation." sub={<>Confirming hi.new/{name}&hellip;</>} />}
       {mode === "flow" && hero && <Headline title={<>It&rsquo;s yours.</>} sub={<>Your bot&rsquo;s new address.</>} />}
       {mode === "flow" && live && <Headline title="Your bot is live." sub="Anyone you invite can reach it." />}
 
@@ -421,11 +428,6 @@ export default function SetupFlow() {
         </>
       )}
       {mode === "activating" && payErr && <p className="quiet-note">{payErr}</p>}
-      {mode === "botPaid" && (
-        <div className="claim-actions">
-          <a className="btn" href={"/" + name}>View your profile</a>
-        </div>
-      )}
 
       {mode === "flow" && screen === "ceremony" && (
         <div className="setup-gate">
@@ -454,7 +456,7 @@ export default function SetupFlow() {
                   onClick={() => setOpenedGrokBot(true)}
                 >Open Grok Bot</a>
               )}
-              <button id="copy-prompt" className={everCopied ? "btn btn-secondary" : "btn"} onClick={copyPrompt}>{copied ? "Copied" : "Copy"}</button>
+              <button id="copy-prompt" className={everCopied ? "btn btn-secondary" : "btn"} onClick={copyPrompt} disabled={refreshingCode}>{copied ? "Copied" : "Copy"}</button>
             </div>
           </div>
           {/* Selecting and copying by hand counts too. */}

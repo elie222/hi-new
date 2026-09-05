@@ -4,22 +4,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Stripe from "stripe";
+import { parsePromoOptions } from "./promo-options";
 
-const [code, ...rest] = process.argv.slice(2);
-if (!code || !/^[A-Z0-9_-]{3,32}$/i.test(code)) {
-  console.error("usage: bun run promo <CODE> [--max N] [--expires YYYY-MM-DD]");
-  process.exit(1);
-}
-const flag = (name: string) => {
-  const i = rest.indexOf(`--${name}`);
-  return i >= 0 ? rest[i + 1] : undefined;
-};
-const max = flag("max") ? Number(flag("max")) : undefined;
-const expires = flag("expires") ? Math.floor(new Date(`${flag("expires")}T23:59:59Z`).getTime() / 1000) : undefined;
-if ((max !== undefined && !(max > 0)) || (expires !== undefined && !Number.isFinite(expires))) {
-  console.error("bad --max or --expires");
-  process.exit(1);
-}
+const { code, max, expires } = parsePromoOptions(process.argv.slice(2));
 
 let key = process.env.STRIPE_SECRET_KEY;
 if (!key) {

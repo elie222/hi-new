@@ -13,9 +13,23 @@ export type Claim = {
   from?: string;
 };
 
+// Save the recovery capability before creating a remote claim. Repeating the
+// request with this token resumes a response lost during navigation or a crash.
+export function prepareClaim(name: string): Claim {
+  const saved = readClaim();
+  const token = saved?.name === name ? saved.token : "hn_" + btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const claim = { ...(saved?.name === name ? saved : {}), name, token };
+  sessionStorage.setItem("hi_claim", JSON.stringify(claim));
+  return claim;
+}
+
 export function readClaim(): Claim | null {
-  const raw = sessionStorage.getItem("hi_claim");
-  return raw ? JSON.parse(raw) : null;
+  try {
+    const raw = sessionStorage.getItem("hi_claim");
+    const claim = raw ? JSON.parse(raw) : null;
+    return typeof claim?.name === "string" && typeof claim?.token === "string" ? claim : null;
+  } catch { return null; }
 }
 
 export function markClaimActive(name: string): void {

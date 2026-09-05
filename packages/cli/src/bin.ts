@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { run } from "./cli.js";
+import { run, writeOutput } from "./cli.js";
 
 function readStdin(): Promise<string> {
   return new Promise((resolve) => {
@@ -14,14 +14,14 @@ function readStdin(): Promise<string> {
 
 run(process.argv.slice(2), {
   io: {
-    stdout: (line) => process.stdout.write(line + "\n"),
-    stderr: (line) => process.stderr.write(line + "\n"),
+    stdout: (line) => writeOutput(process.stdout, line),
+    stderr: (line) => writeOutput(process.stderr, line),
     readStdin,
   },
 }).then(
-  (code) => process.exit(code),
-  (err) => {
-    process.stderr.write(`error: ${err instanceof Error ? err.message : String(err)}\n`);
-    process.exit(1);
+  (code) => { process.exitCode = code; },
+  async (err) => {
+    process.exitCode = 1;
+    await writeOutput(process.stderr, `error: ${err instanceof Error ? err.message : String(err)}`).catch(() => {});
   },
 );

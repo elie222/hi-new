@@ -7,6 +7,8 @@ import { magicLink } from "better-auth/plugins";
 import type { Db } from "../db/client";
 import * as authSchema from "../db/auth-schema";
 import { ownerLoginEmailText, type SendEmail } from "./email";
+import { sha256Hex } from "./tokens";
+import { eq } from "drizzle-orm";
 
 export const OWNER_AUTH_PATH = "/owner/auth";
 export const OWNER_LOGIN_TTL_S = 15 * 60;
@@ -53,7 +55,15 @@ export function createOwnerAuth(opts: { db: Db; origin: string; env: OwnerAuthEn
       // Cloudflare puts the real client IP here; rate limits key on it.
       ipAddress: { ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"] },
     },
-    account: { accountLinking: { enabled: true, trustedProviders: ["github", "google"] } },
+    account: { encryptOAuthTokens: true, accountLinking: { enabled: true, trustedProviders: ["github", "google"] } },
+    // OAuth proves identity; this app never calls provider APIs on the owner's behalf.
+    // Keep the account link, but do not retain the provider's bearer credentials.
+    databaseHooks: {
+      account: {
+        create: { before: async (account) => ({ data: { ...account, accessToken: null, refreshToken: null, idToken: null } }) },
+        update: { before: async (account) => ({ data: { ...account, accessToken: null, refreshToken: null, idToken: null } }) },
+      },
+    },
     socialProviders: {
       ...(providers.github
         ? { github: { clientId: env.GITHUB_CLIENT_ID!, clientSecret: env.GITHUB_CLIENT_SECRET! } }
@@ -70,6 +80,17 @@ export function createOwnerAuth(opts: { db: Db; origin: string; env: OwnerAuthEn
     plugins: [
       magicLink({
         expiresIn: OWNER_LOGIN_TTL_S,
+        storeToken: {
+          type: "custom-hasher",
+          hash: async (token) => {
+            const digest = await sha256Hex(token);
+            // Accept existing links while the post-deploy backfill runs.
+            if (/^[a-zA-Z]{32}$/.test(token)) {
+              await db.update(authSchema.verification).set({ identifier: digest }).where(eq(authSchema.verification.identifier, token));
+            }
+            return digest;
+          },
+        },
         // The email links to our confirm page, not straight to the verify
         // endpoint, so a mail scanner following links can't consume the token.
         sendMagicLink: async ({ email, token, url }) => {

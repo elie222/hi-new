@@ -3,7 +3,7 @@
   "name": "hi-new",
   "main": "src/index.ts",
   "compatibility_date": "2025-08-01",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   // The DB is single-region; run the Worker near it, not near the caller, so
   // multi-query requests don't cross the ocean per query.
   "placement": { "mode": "smart" },

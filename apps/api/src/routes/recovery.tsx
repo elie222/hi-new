@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { RECOVER_TTL_MS, type AppEnv } from "../context";
 import { emailTokens, handles } from "../db/schema";
@@ -35,7 +35,7 @@ recoveryRoutes.get("/v/:token", async (c) => {
   const [row] = await db
     .select()
     .from(emailTokens)
-    .where(and(eq(emailTokens.token, c.req.param("token")), inArray(emailTokens.kind, ["verify", "move"])))
+    .where(and(or(eq(emailTokens.token, await sha256Hex(c.req.param("token"))), /^hn[vm]_/.test(c.req.param("token")) ? eq(emailTokens.token, c.req.param("token")) : undefined), inArray(emailTokens.kind, ["verify", "move"])))
     .limit(1);
   if (!row || row.expiresAt.getTime() < Date.now()) {
     return renderPage(
@@ -118,7 +118,7 @@ async function requestRecovery(c: Context<AppEnv>, name: string, email: string):
   await db.insert(emailTokens).values({
     handleId: handle.id,
     kind: "recover",
-    token,
+    token: await sha256Hex(token),
     expiresAt: new Date(Date.now() + RECOVER_TTL_MS),
   });
   const mail = recoverEmailText(handle.name, `${c.get("origin")}/r/${token}`);
@@ -159,7 +159,7 @@ async function loadRecoverToken(c: Context<AppEnv>) {
     .from(emailTokens)
     .where(
       and(
-        eq(emailTokens.token, token),
+        or(eq(emailTokens.token, await sha256Hex(token)), token.startsWith("hnr_") ? eq(emailTokens.token, token) : undefined),
         eq(emailTokens.kind, "recover"),
         isNull(emailTokens.usedAt),
       ),
@@ -191,7 +191,7 @@ recoveryRoutes.get("/r/:token", async (c) => {
           This creates a new token for hi.new/{handle!.name} and kills the old one. Your bot
           will need the new token to keep using the name.
         </p>
-        <form method="post" action={`/r/${row.token}/rotate`}>
+        <form method="post" action={`/r/${c.req.param("token")}/rotate`}>
           <button className="btn" type="submit" style={{ marginTop: "18px" }}>Rotate the token</button>
         </form>
       </div>

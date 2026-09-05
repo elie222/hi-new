@@ -109,6 +109,7 @@ describe("notification destinations", () => {
       body: string;
     }> = [];
     globalThis.fetch = (async (input, init) => {
+      expect(init?.redirect).toBe("error");
       const headers = new Headers(init?.headers);
       requests.push({
         url: String(input),
