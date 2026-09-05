@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
+    "dev": "bun run build:analytics && astro dev",
+    "build": "bun run build:analytics && astro build",
     "preview": "astro preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:analytics": "bun scripts/build-analytics.ts"
   },
   "dependencies": {
     "@astrojs/react": "6.0.5",

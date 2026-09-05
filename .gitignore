@@ -17,3 +17,5 @@ playwright-report/
 
 # Local security scans, generated findings, and scanner credentials.
 .deepsec/
+
+apps/landing/public/analytics.js

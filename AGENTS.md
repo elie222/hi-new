@@ -1,5 +1,9 @@
 # hi.new
 
+This is a public repository. Keep keys and project-specific configuration in environment variables.
+
+Write self-documenting code; reserve comments for non-obvious intent or constraints.
+
 ## Product copy
 
 - Keep it concise. One short sentence beats three.

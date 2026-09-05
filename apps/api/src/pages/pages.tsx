@@ -123,6 +123,7 @@ export function UnclaimedPage(props: { name: string; priceCents: number; origin:
   const claimScript = `(function(){
 var btn=document.getElementById("claim-here"),err=document.getElementById("claim-err");
 btn.addEventListener("click",async function(){
+  window.hiTrack?.("claim_started",{source:"profile",paid:${priceCents > 0}});
   btn.disabled=true;btn.textContent="Claiming…";
   try{
     var ref=null;
@@ -139,12 +140,13 @@ btn.addEventListener("click",async function(){
     var res=await fetch("/api/handles",{method:"POST",headers:{"content-type":"application/json","x-hi-new-claim-token":claimToken},body:JSON.stringify(body)});
     var data=await res.json();
     if(res.status===201||res.status===402){
+      window.hiTrack?.("claim_created",{source:"profile",paid:res.status===402});
       try{sessionStorage.setItem("hi_claim",JSON.stringify({name:data.name,token:data.token,paid:res.status===402,price_usd_per_year:data.price_usd_per_year,checkout_url:data.checkout_url}))}catch(e){err.textContent="Claim succeeded. Save this token before leaving: "+data.token;btn.disabled=false;btn.textContent=${JSON.stringify(buttonLabel)};return;}
       if(res.status===201){location.href="/"+encodeURIComponent(data.name)+"/setup";return;}
       btn.textContent="Taking you to checkout…";
       var co=await fetch("/buy/"+encodeURIComponent(data.name)+"/checkout",{method:"POST",headers:{accept:"application/json","x-hi-new-claim-token":data.token}});
       var cod=await co.json();
-      if(co.ok&&cod.url){location.href=cod.url;return;}
+      if(co.ok&&cod.url){window.hiTrack?.("checkout_started",{source:"profile"});location.href=cod.url;return;}
       err.textContent=cod.hint||cod.error||"Checkout isn't available right now.";
     }else if(res.status===409&&data.error==="name_taken"){
       err.textContent="Someone just took it.";

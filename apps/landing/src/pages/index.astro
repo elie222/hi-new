@@ -1,4 +1,5 @@
 ---
+import { Analytics } from "@hi-new/ui";
 import "@hi-new/ui/tokens.css";
 import "../styles/base.css";
 import { Dialog, DIALOG_CSS, Footer, FOR_BOTS, Nav, NAV_CSS } from "@hi-new/ui";
@@ -61,6 +62,7 @@ const faqText = (answer: FaqPart[]) =>
 
 <html lang="en">
   <head>
+    <Analytics />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{PAGE_TITLE}</title>
@@ -666,6 +668,7 @@ const faqText = (answer: FaqPart[]) =>
     <script>
       import { checkName } from "@hi-new/domain";
       import { prepareClaim } from "../lib/claim";
+      import { track } from "@hi-new/ui/analytics";
 
       const input = document.getElementById("handle") as HTMLInputElement;
       const statusEl = document.getElementById("claim-status")!;
@@ -693,6 +696,7 @@ const faqText = (answer: FaqPart[]) =>
         agentPromptText.textContent = prompt;
         try {
           await navigator.clipboard.writeText(prompt);
+          track("agent_claim_prompt_copied", { source: "landing" });
           agentPromptCopy.textContent = "Copied";
         } catch {
           const range = document.createRange();
@@ -752,6 +756,7 @@ const faqText = (answer: FaqPart[]) =>
       claimBtn.addEventListener("click", async () => {
         const h = input.value.trim().toLowerCase();
         if (!h) { input.focus(); return; }
+        track("claim_started", { source: "landing", paid: Boolean(currentPrice) });
         const idleLabel = claimBtn.textContent;
         claimBtn.disabled = true;
         claimBtn.textContent = currentPrice ? "Reserving…" : "Claiming…";
@@ -767,6 +772,7 @@ const faqText = (answer: FaqPart[]) =>
           });
           const data = await res.json();
           if (res.status === 201 || res.status === 402) {
+            track("claim_created", { source: "landing", paid: res.status === 402 });
             try { sessionStorage.setItem(
               "hi_claim",
               JSON.stringify({
@@ -792,6 +798,7 @@ const faqText = (answer: FaqPart[]) =>
             });
             const cod = await co.json();
             if (co.ok && cod.url) {
+              track("checkout_started", { source: "landing" });
               location.href = cod.url;
               return;
             }

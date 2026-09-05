@@ -24,6 +24,7 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   webServer: {
+    env: { PUBLIC_POSTHOG_KEY: "test-posthog-project-token" },
     command: "bun run --cwd apps/landing build && bun --cwd apps/api e2e/server.ts",
     url: `http://127.0.0.1:${PORT}/api/owner/session`,
     reuseExistingServer: !process.env.CI,
