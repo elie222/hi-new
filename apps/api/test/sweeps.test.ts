@@ -125,7 +125,7 @@ describe("webhook SSRF guard", () => {
     let capturedBody = "";
     let pending: Promise<unknown> | undefined;
     globalThis.fetch = (async (input, init) => {
-      expect(init?.redirect).toBe("error");
+      expect(init?.redirect).toBe("manual");
       capturedUrl = String(input);
       capturedBody = String(init?.body ?? "");
       return new Response(null, { status: 204 });
