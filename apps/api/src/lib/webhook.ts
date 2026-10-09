@@ -38,7 +38,7 @@ export async function deliverWebhook(
   if (!isSafeWebhookUrl(url)) return;
   await fetch(url, {
     method: "POST",
-    redirect: "error",
+    redirect: "manual",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ event: "inbox.new", to: toName, unread }),
     signal: AbortSignal.timeout(5000),
