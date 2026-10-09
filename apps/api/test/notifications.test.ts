@@ -2,12 +2,32 @@ import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { notificationDestinations } from "../src/db/schema";
 import { deliverNotificationDestination } from "../src/lib/notification-destinations";
+import { deliverWebhook } from "../src/lib/webhook";
 import { call, connect, makeTestApp, signup } from "./helpers";
 
 const grokUrl =
   "https://api2.cursor.sh/automations/webhook/01234567-89ab-cdef-0123-456789abcdef";
 
 describe("notification destinations", () => {
+  test("sends legacy webhooks without following redirects", async () => {
+    const originalFetch = globalThis.fetch;
+    let requests = 0;
+    globalThis.fetch = (async (_input, init) => {
+      requests++;
+      expect(init?.redirect).toBe("manual");
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://example.org/redirect-target" },
+      });
+    }) as typeof fetch;
+    try {
+      await deliverWebhook("https://example.com/webhook", "test-recipient", 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    expect(requests).toBe(1);
+  });
+
   test("stores private Grok configuration encrypted and manages redacted metadata", async () => {
     const { app, db } = await makeTestApp();
     const bot = await signup(app, "wake-bot");
@@ -109,7 +129,7 @@ describe("notification destinations", () => {
       body: string;
     }> = [];
     globalThis.fetch = (async (input, init) => {
-      expect(init?.redirect).toBe("error");
+      expect(init?.redirect).toBe("manual");
       const headers = new Headers(init?.headers);
       requests.push({
         url: String(input),
@@ -180,6 +200,60 @@ describe("notification destinations", () => {
     expect(JSON.parse(body)).toEqual({
       text: "New hi.new inbox activity for slack-bot. 2 unread.",
     });
+  });
+
+  test("records redirects as failures without following them or exposing the target", async () => {
+    const pending: Promise<unknown>[] = [];
+    const { app } = await makeTestApp({
+      waitUntil: (promise) => pending.push(promise),
+    });
+    const recipient = await signup(app, "redirect-recipient");
+    const sender = await signup(app, "redirect-sender");
+    await connect(app, recipient, sender);
+    await Promise.allSettled(pending.splice(0));
+    await call(app, "POST", "/api/notifications", {
+      token: recipient.token,
+      body: {
+        kind: "webhook",
+        endpoint: {
+          url: "https://example.com/webhook",
+          headers: { Authorization: "Bearer test-secret" },
+        },
+      },
+    });
+
+    const originalFetch = globalThis.fetch;
+    let requests = 0;
+    globalThis.fetch = (async (_input, init) => {
+      requests++;
+      expect(init?.redirect).toBe("manual");
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://example.org/private-target" },
+      });
+    }) as typeof fetch;
+    try {
+      await call(app, "POST", "/api/dm/redirect-recipient", {
+        token: sender.token,
+        body: { body: "test message", enc: "none" },
+      });
+      await Promise.allSettled(pending.splice(0));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requests).toBe(1);
+    const listed = await call(app, "GET", "/api/notifications", {
+      token: recipient.token,
+    });
+    expect(listed.json.destinations[0]).toMatchObject({
+      failure_count: 1,
+      last_error: "http_302",
+      last_success_at: null,
+    });
+    expect(listed.json.destinations[0].last_attempt_at).not.toBeNull();
+    expect(JSON.stringify(listed.json)).not.toContain("test-secret");
+    expect(JSON.stringify(listed.json)).not.toContain("private-target");
   });
 
   test("refuses private destination storage without an encryption key", async () => {
